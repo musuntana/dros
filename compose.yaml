@@ -1,0 +1,184 @@
+x-backend-build: &backend-build
+  context: .
+  dockerfile: backend/Dockerfile
+  args:
+    APT_MIRROR_HOST: ${APT_MIRROR_HOST:-mirrors.tuna.tsinghua.edu.cn}
+    PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}
+
+x-frontend-build: &frontend-build
+  context: .
+  dockerfile: frontend/Dockerfile
+  args:
+    APT_MIRROR_HOST: ${APT_MIRROR_HOST:-mirrors.tuna.tsinghua.edu.cn}
+    NPM_REGISTRY: ${NPM_REGISTRY:-https://mirrors.tencent.com/npm/}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dros}
+      POSTGRES_USER: ${POSTGRES_USER:-dros}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dros}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/ddl_research_ledger_v2.sql:/docker-entrypoint-initdb.d/10-ddl_research_ledger_v2.sql:ro
+      - ./sql/docker-init/20-dev-ledger-snapshot.sql:/docker-entrypoint-initdb.d/20-dev-ledger-snapshot.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-dros} -d ${POSTGRES_DB:-dros}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    profiles: ["postgres"]
+    build: *backend-build
+    environment:
+      DROS_LEDGER_BACKEND: postgres
+      DROS_POSTGRES_DSN: postgresql://${POSTGRES_USER:-dros}:${POSTGRES_PASSWORD:-dros}@postgres:5432/${POSTGRES_DB:-dros}
+      DROS_POSTGRES_SCHEMA: ${DROS_POSTGRES_SCHEMA:-dr_os_dev}
+      DROS_OBJECT_STORE_PATH: /data/object-store
+      DROS_AUTH_MODE: ${DROS_AUTH_MODE:-dev_headers}
+      DROS_AUTH_JWT_SECRET: ${DROS_AUTH_JWT_SECRET:-}
+      DROS_AUTH_OIDC_DISCOVERY_URL: ${DROS_AUTH_OIDC_DISCOVERY_URL:-}
+      DROS_AUTH_JWKS_URL: ${DROS_AUTH_JWKS_URL:-}
+      DROS_AUTH_JWT_ALGORITHMS: ${DROS_AUTH_JWT_ALGORITHMS:-HS256}
+      DROS_AUTH_OIDC_CACHE_TTL_SECONDS: ${DROS_AUTH_OIDC_CACHE_TTL_SECONDS:-300}
+      DROS_AUTH_JWKS_CACHE_TTL_SECONDS: ${DROS_AUTH_JWKS_CACHE_TTL_SECONDS:-300}
+      DROS_AUTH_JWKS_TIMEOUT_SECONDS: ${DROS_AUTH_JWKS_TIMEOUT_SECONDS:-5}
+      DROS_AUTH_JWT_ISSUER: ${DROS_AUTH_JWT_ISSUER:-}
+      DROS_AUTH_JWT_AUDIENCE: ${DROS_AUTH_JWT_AUDIENCE:-}
+      DROS_AUTH_PRINCIPAL_CLAIM: ${DROS_AUTH_PRINCIPAL_CLAIM:-principal_id}
+      DROS_AUTH_TENANT_CLAIM: ${DROS_AUTH_TENANT_CLAIM:-tenant_id}
+      DROS_AUTH_PROJECT_ROLE_CLAIM: ${DROS_AUTH_PROJECT_ROLE_CLAIM:-project_role}
+      DROS_AUTH_SCOPES_CLAIM: ${DROS_AUTH_SCOPES_CLAIM:-scope}
+      DROS_AUTH_JTI_CLAIM: ${DROS_AUTH_JTI_CLAIM:-jti}
+      DROS_AUTH_REQUIRE_JTI: ${DROS_AUTH_REQUIRE_JTI:-false}
+      DROS_AUTH_REVOKED_JTI_LIST: ${DROS_AUTH_REVOKED_JTI_LIST:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - object_store_data:/data/object-store
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  frontend:
+    profiles: ["postgres"]
+    build: *frontend-build
+    environment:
+      CONTROL_PLANE_BASE_URL: http://backend:8000
+      NEXT_PUBLIC_CONTROL_PLANE_BASE_URL: http://127.0.0.1:8000
+      GATEWAY_BASE_URL: ${GATEWAY_BASE_URL:-http://backend:8000}
+      NEXT_PUBLIC_GATEWAY_BASE_URL: ${NEXT_PUBLIC_GATEWAY_BASE_URL:-http://127.0.0.1:8000}
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/projects').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend-json:
+    profiles: ["json-legacy"]
+    build: *backend-build
+    environment:
+      DROS_LEDGER_BACKEND: json
+      DROS_LEDGER_PATH: /data/ledger/ledger.json
+      DROS_OBJECT_STORE_PATH: /data/object-store
+      DROS_AUTH_MODE: ${DROS_AUTH_MODE:-dev_headers}
+      DROS_AUTH_JWT_SECRET: ${DROS_AUTH_JWT_SECRET:-}
+      DROS_AUTH_OIDC_DISCOVERY_URL: ${DROS_AUTH_OIDC_DISCOVERY_URL:-}
+      DROS_AUTH_JWKS_URL: ${DROS_AUTH_JWKS_URL:-}
+      DROS_AUTH_JWT_ALGORITHMS: ${DROS_AUTH_JWT_ALGORITHMS:-HS256}
+      DROS_AUTH_OIDC_CACHE_TTL_SECONDS: ${DROS_AUTH_OIDC_CACHE_TTL_SECONDS:-300}
+      DROS_AUTH_JWKS_CACHE_TTL_SECONDS: ${DROS_AUTH_JWKS_CACHE_TTL_SECONDS:-300}
+      DROS_AUTH_JWKS_TIMEOUT_SECONDS: ${DROS_AUTH_JWKS_TIMEOUT_SECONDS:-5}
+      DROS_AUTH_JWT_ISSUER: ${DROS_AUTH_JWT_ISSUER:-}
+      DROS_AUTH_JWT_AUDIENCE: ${DROS_AUTH_JWT_AUDIENCE:-}
+      DROS_AUTH_PRINCIPAL_CLAIM: ${DROS_AUTH_PRINCIPAL_CLAIM:-principal_id}
+      DROS_AUTH_TENANT_CLAIM: ${DROS_AUTH_TENANT_CLAIM:-tenant_id}
+      DROS_AUTH_PROJECT_ROLE_CLAIM: ${DROS_AUTH_PROJECT_ROLE_CLAIM:-project_role}
+      DROS_AUTH_SCOPES_CLAIM: ${DROS_AUTH_SCOPES_CLAIM:-scope}
+      DROS_AUTH_JTI_CLAIM: ${DROS_AUTH_JTI_CLAIM:-jti}
+      DROS_AUTH_REQUIRE_JTI: ${DROS_AUTH_REQUIRE_JTI:-false}
+      DROS_AUTH_REVOKED_JTI_LIST: ${DROS_AUTH_REVOKED_JTI_LIST:-}
+    volumes:
+      - json_ledger:/data/ledger
+      - object_store_data:/data/object-store
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  frontend-json:
+    profiles: ["json-legacy"]
+    build: *frontend-build
+    environment:
+      CONTROL_PLANE_BASE_URL: http://backend-json:8000
+      NEXT_PUBLIC_CONTROL_PLANE_BASE_URL: http://127.0.0.1:8000
+      GATEWAY_BASE_URL: ${GATEWAY_BASE_URL:-http://backend-json:8000}
+      NEXT_PUBLIC_GATEWAY_BASE_URL: ${NEXT_PUBLIC_GATEWAY_BASE_URL:-http://127.0.0.1:8000}
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      backend-json:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/projects').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  json_ledger:
+  object_store_data:

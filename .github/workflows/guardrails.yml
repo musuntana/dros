@@ -1,0 +1,40 @@
+name: Guardrails
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  vocabulary-and-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: Compile Python sources
+        run: python -m compileall backend/app backend/scripts
+
+      - name: Check vocabulary drift
+        run: python backend/scripts/check_vocabulary.py
+
+      - name: Check schema drift
+        run: python backend/scripts/export_json_schemas.py --check
+
+      - name: Check architecture drift
+        run: python backend/scripts/check_architecture.py
+
+      - name: Run Tests
+        run: pytest

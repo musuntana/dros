@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "EvidenceLinkedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "assertion_id": {
+          "format": "uuid",
+          "title": "Assertion Id",
+          "type": "string"
+        },
+        "evidence_link_id": {
+          "format": "uuid",
+          "title": "Evidence Link Id",
+          "type": "string"
+        },
+        "evidence_source_id": {
+          "format": "uuid",
+          "title": "Evidence Source Id",
+          "type": "string"
+        },
+        "relation_type": {
+          "enum": [
+            "supports",
+            "contradicts",
+            "method_ref",
+            "background_ref"
+          ],
+          "title": "Relation Type",
+          "type": "string"
+        },
+        "verifier_status": {
+          "enum": [
+            "pending",
+            "passed",
+            "warning",
+            "blocked"
+          ],
+          "title": "Verifier Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assertion_id",
+        "evidence_link_id",
+        "evidence_source_id",
+        "relation_type",
+        "verifier_status"
+      ],
+      "title": "EvidenceLinkedPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_name": {
+      "const": "evidence.linked",
+      "default": "evidence.linked",
+      "title": "Event Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "produced_by": {
+      "minLength": 1,
+      "title": "Produced By",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/EvidenceLinkedPayload"
+    }
+  },
+  "required": [
+    "event_id",
+    "produced_by",
+    "trace_id",
+    "tenant_id",
+    "project_id",
+    "idempotency_key",
+    "occurred_at",
+    "payload"
+  ],
+  "title": "EvidenceLinkedEvent",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

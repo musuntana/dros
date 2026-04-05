@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "AgentExecutionStatus": {
+      "enum": [
+        "ok",
+        "blocked",
+        "needs_human",
+        "failed"
+      ],
+      "title": "AgentExecutionStatus",
+      "type": "string"
+    },
+    "AssertionType": {
+      "enum": [
+        "background",
+        "method",
+        "result",
+        "limitation"
+      ],
+      "title": "AssertionType",
+      "type": "string"
+    },
+    "GeneratedAssertion": {
+      "additionalProperties": false,
+      "properties": {
+        "assertion_id": {
+          "minLength": 1,
+          "title": "Assertion Id",
+          "type": "string"
+        },
+        "assertion_type": {
+          "$ref": "#/$defs/AssertionType"
+        },
+        "text_norm": {
+          "minLength": 1,
+          "title": "Text Norm",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "assertion_id",
+        "assertion_type",
+        "text_norm",
+        "source_refs"
+      ],
+      "title": "GeneratedAssertion",
+      "type": "object"
+    },
+    "GeneratedBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "minLength": 1,
+          "title": "Block Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "assertion_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Assertion Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "block_id",
+        "text",
+        "assertion_ids"
+      ],
+      "title": "GeneratedBlock",
+      "type": "object"
+    },
+    "SectionKey": {
+      "enum": [
+        "title",
+        "abstract",
+        "introduction",
+        "methods",
+        "results",
+        "discussion",
+        "conclusion",
+        "figure_legend",
+        "table_note",
+        "appendix"
+      ],
+      "title": "SectionKey",
+      "type": "string"
+    },
+    "WritingAgentResult": {
+      "additionalProperties": false,
+      "properties": {
+        "section_key": {
+          "$ref": "#/$defs/SectionKey"
+        },
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/GeneratedBlock"
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        },
+        "assertions": {
+          "items": {
+            "$ref": "#/$defs/GeneratedAssertion"
+          },
+          "title": "Assertions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "section_key",
+        "blocks"
+      ],
+      "title": "WritingAgentResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "const": "writing_agent",
+      "default": "writing_agent",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentExecutionStatus"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "artifacts_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Artifacts Produced",
+      "type": "array"
+    },
+    "assertions_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assertions Produced",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "blocking_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Blocking Reasons",
+      "type": "array"
+    },
+    "needs_human_items": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Needs Human Items",
+      "type": "array"
+    },
+    "result": {
+      "$ref": "#/$defs/WritingAgentResult"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "status",
+    "confidence",
+    "result"
+  ],
+  "title": "WritingAgentResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

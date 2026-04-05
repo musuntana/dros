@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "ProjectCreatedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "owner_id": {
+          "format": "uuid",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "project_type": {
+          "enum": [
+            "public_omics",
+            "clinical_retrospective",
+            "case_report",
+            "grant"
+          ],
+          "title": "Project Type",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "running",
+            "review_required",
+            "approved",
+            "archived"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "owner_id",
+        "project_type",
+        "status"
+      ],
+      "title": "ProjectCreatedPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_name": {
+      "const": "project.created",
+      "default": "project.created",
+      "title": "Event Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "produced_by": {
+      "minLength": 1,
+      "title": "Produced By",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/ProjectCreatedPayload"
+    }
+  },
+  "required": [
+    "event_id",
+    "produced_by",
+    "trace_id",
+    "tenant_id",
+    "project_id",
+    "idempotency_key",
+    "occurred_at",
+    "payload"
+  ],
+  "title": "ProjectCreatedEvent",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

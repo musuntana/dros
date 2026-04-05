@@ -1,0 +1,33 @@
+{
+  "name": "dros-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "node -e \"require('node:fs').rmSync('.next/types', { recursive: true, force: true })\" && next typegen && tsc --noEmit --incremental false",
+    "test:e2e": "playwright test",
+    "contracts:generate": "python3 ../backend/scripts/export_frontend_contracts.py",
+    "contracts:check": "python3 ../backend/scripts/export_frontend_contracts.py --check"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.66.8",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.1",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  }
+}

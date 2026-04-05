@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "DatasetSnapshotBlockedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_id": {
+          "format": "uuid",
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "format": "uuid",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "blocked_checks": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Blocked Checks",
+          "type": "array"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "snapshot_id",
+        "blocked_checks",
+        "reason"
+      ],
+      "title": "DatasetSnapshotBlockedPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_name": {
+      "const": "dataset.snapshot.blocked",
+      "default": "dataset.snapshot.blocked",
+      "title": "Event Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "produced_by": {
+      "minLength": 1,
+      "title": "Produced By",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/DatasetSnapshotBlockedPayload"
+    }
+  },
+  "required": [
+    "event_id",
+    "produced_by",
+    "trace_id",
+    "tenant_id",
+    "project_id",
+    "idempotency_key",
+    "occurred_at",
+    "payload"
+  ],
+  "title": "DatasetSnapshotBlockedEvent",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

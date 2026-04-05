@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "AgentExecutionStatus": {
+      "enum": [
+        "ok",
+        "blocked",
+        "needs_human",
+        "failed"
+      ],
+      "title": "AgentExecutionStatus",
+      "type": "string"
+    },
+    "VerificationCheckStatus": {
+      "enum": [
+        "passed",
+        "warning",
+        "needs_human"
+      ],
+      "title": "VerificationCheckStatus",
+      "type": "string"
+    },
+    "VerifierAgentResult": {
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "$ref": "#/$defs/VerifierVerdict"
+        },
+        "semantic_checks": {
+          "items": {
+            "$ref": "#/$defs/VerifierCheck"
+          },
+          "minItems": 1,
+          "title": "Semantic Checks",
+          "type": "array"
+        },
+        "recommended_actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Recommended Actions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "verdict",
+        "semantic_checks"
+      ],
+      "title": "VerifierAgentResult",
+      "type": "object"
+    },
+    "VerifierCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/VerificationCheckStatus"
+        },
+        "block_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Block Id"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "suggested_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suggested Action"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "message"
+      ],
+      "title": "VerifierCheck",
+      "type": "object"
+    },
+    "VerifierVerdict": {
+      "enum": [
+        "passed",
+        "warning",
+        "needs_human"
+      ],
+      "title": "VerifierVerdict",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "const": "verifier_agent",
+      "default": "verifier_agent",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentExecutionStatus"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "artifacts_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Artifacts Produced",
+      "type": "array"
+    },
+    "assertions_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assertions Produced",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "blocking_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Blocking Reasons",
+      "type": "array"
+    },
+    "needs_human_items": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Needs Human Items",
+      "type": "array"
+    },
+    "result": {
+      "$ref": "#/$defs/VerifierAgentResult"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "status",
+    "confidence",
+    "result"
+  ],
+  "title": "VerifierAgentResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,170 @@
+{
+  "$defs": {
+    "ComplianceLevel": {
+      "enum": [
+        "public",
+        "internal",
+        "clinical"
+      ],
+      "title": "ComplianceLevel",
+      "type": "string"
+    },
+    "EvidenceSourceType": {
+      "enum": [
+        "pubmed",
+        "pmc",
+        "geo",
+        "tcga",
+        "manual"
+      ],
+      "title": "EvidenceSourceType",
+      "type": "string"
+    },
+    "PolicyContext": {
+      "additionalProperties": false,
+      "properties": {
+        "compliance_level": {
+          "$ref": "#/$defs/ComplianceLevel",
+          "default": "internal"
+        },
+        "allow_external_llm": {
+          "default": false,
+          "title": "Allow External Llm",
+          "type": "boolean"
+        },
+        "phi_cleared": {
+          "default": false,
+          "title": "Phi Cleared",
+          "type": "boolean"
+        }
+      },
+      "title": "PolicyContext",
+      "type": "object"
+    },
+    "SearchFilters": {
+      "additionalProperties": false,
+      "properties": {
+        "source_types": {
+          "items": {
+            "$ref": "#/$defs/EvidenceSourceType"
+          },
+          "title": "Source Types",
+          "type": "array"
+        },
+        "publication_year_from": {
+          "anyOf": [
+            {
+              "maximum": 2200,
+              "minimum": 1900,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Year From"
+        },
+        "publication_year_to": {
+          "anyOf": [
+            {
+              "maximum": 2200,
+              "minimum": 1900,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Year To"
+        },
+        "journals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Journals",
+          "type": "array"
+        },
+        "max_results": {
+          "default": 20,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "include_abstract": {
+          "default": true,
+          "title": "Include Abstract",
+          "type": "boolean"
+        }
+      },
+      "title": "SearchFilters",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "actor_id": {
+      "minLength": 1,
+      "title": "Actor Id",
+      "type": "string"
+    },
+    "input_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Input Refs",
+      "type": "array"
+    },
+    "policy_context": {
+      "$ref": "#/$defs/PolicyContext"
+    },
+    "task_type": {
+      "const": "literature_search",
+      "default": "literature_search",
+      "title": "Task Type",
+      "type": "string"
+    },
+    "query": {
+      "minLength": 3,
+      "title": "Query",
+      "type": "string"
+    },
+    "filters": {
+      "$ref": "#/$defs/SearchFilters"
+    },
+    "existing_dedupe_keys": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Existing Dedupe Keys",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "actor_id",
+    "query"
+  ],
+  "title": "SearchAgentRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "ExportCompletedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "export_job_id": {
+          "format": "uuid",
+          "title": "Export Job Id",
+          "type": "string"
+        },
+        "manuscript_id": {
+          "format": "uuid",
+          "title": "Manuscript Id",
+          "type": "string"
+        },
+        "output_artifact_id": {
+          "format": "uuid",
+          "title": "Output Artifact Id",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "docx",
+            "pdf",
+            "zip"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "export_job_id",
+        "manuscript_id",
+        "output_artifact_id",
+        "format",
+        "completed_at"
+      ],
+      "title": "ExportCompletedPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_name": {
+      "const": "export.completed",
+      "default": "export.completed",
+      "title": "Event Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "produced_by": {
+      "minLength": 1,
+      "title": "Produced By",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/ExportCompletedPayload"
+    }
+  },
+  "required": [
+    "event_id",
+    "produced_by",
+    "trace_id",
+    "tenant_id",
+    "project_id",
+    "idempotency_key",
+    "occurred_at",
+    "payload"
+  ],
+  "title": "ExportCompletedEvent",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,181 @@
+{
+  "$defs": {
+    "AssertionType": {
+      "enum": [
+        "background",
+        "method",
+        "result",
+        "limitation"
+      ],
+      "title": "AssertionType",
+      "type": "string"
+    },
+    "ComplianceLevel": {
+      "enum": [
+        "public",
+        "internal",
+        "clinical"
+      ],
+      "title": "ComplianceLevel",
+      "type": "string"
+    },
+    "PolicyContext": {
+      "additionalProperties": false,
+      "properties": {
+        "compliance_level": {
+          "$ref": "#/$defs/ComplianceLevel",
+          "default": "internal"
+        },
+        "allow_external_llm": {
+          "default": false,
+          "title": "Allow External Llm",
+          "type": "boolean"
+        },
+        "phi_cleared": {
+          "default": false,
+          "title": "Phi Cleared",
+          "type": "boolean"
+        }
+      },
+      "title": "PolicyContext",
+      "type": "object"
+    },
+    "SectionKey": {
+      "enum": [
+        "title",
+        "abstract",
+        "introduction",
+        "methods",
+        "results",
+        "discussion",
+        "conclusion",
+        "figure_legend",
+        "table_note",
+        "appendix"
+      ],
+      "title": "SectionKey",
+      "type": "string"
+    },
+    "VerifiedAssertionPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "assertion_id": {
+          "minLength": 1,
+          "title": "Assertion Id",
+          "type": "string"
+        },
+        "assertion_type": {
+          "$ref": "#/$defs/AssertionType"
+        },
+        "text_norm": {
+          "minLength": 1,
+          "title": "Text Norm",
+          "type": "string"
+        },
+        "numeric_payload_json": {
+          "additionalProperties": true,
+          "title": "Numeric Payload Json",
+          "type": "object"
+        },
+        "source_artifact_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Artifact Id"
+        },
+        "evidence_source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Source Ids",
+          "type": "array"
+        },
+        "verification_status": {
+          "const": "verified",
+          "default": "verified",
+          "title": "Verification Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assertion_id",
+        "assertion_type",
+        "text_norm"
+      ],
+      "title": "VerifiedAssertionPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "actor_id": {
+      "minLength": 1,
+      "title": "Actor Id",
+      "type": "string"
+    },
+    "input_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Input Refs",
+      "type": "array"
+    },
+    "policy_context": {
+      "$ref": "#/$defs/PolicyContext"
+    },
+    "task_type": {
+      "const": "manuscript_generation",
+      "default": "manuscript_generation",
+      "title": "Task Type",
+      "type": "string"
+    },
+    "section_key": {
+      "$ref": "#/$defs/SectionKey"
+    },
+    "style_constraints": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Style Constraints",
+      "type": "array"
+    },
+    "verified_assertions": {
+      "items": {
+        "$ref": "#/$defs/VerifiedAssertionPayload"
+      },
+      "title": "Verified Assertions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "actor_id",
+    "section_key"
+  ],
+  "title": "WritingAgentRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

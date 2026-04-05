@@ -1,0 +1,162 @@
+{
+  "$defs": {
+    "ComplianceLevel": {
+      "enum": [
+        "public",
+        "internal",
+        "clinical"
+      ],
+      "title": "ComplianceLevel",
+      "type": "string"
+    },
+    "DatasetField": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_id": {
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "field_name": {
+          "minLength": 1,
+          "title": "Field Name",
+          "type": "string"
+        },
+        "data_type": {
+          "minLength": 1,
+          "title": "Data Type",
+          "type": "string"
+        },
+        "semantic_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Role"
+        },
+        "nullable": {
+          "default": true,
+          "title": "Nullable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "field_name",
+        "data_type"
+      ],
+      "title": "DatasetField",
+      "type": "object"
+    },
+    "PolicyContext": {
+      "additionalProperties": false,
+      "properties": {
+        "compliance_level": {
+          "$ref": "#/$defs/ComplianceLevel",
+          "default": "internal"
+        },
+        "allow_external_llm": {
+          "default": false,
+          "title": "Allow External Llm",
+          "type": "boolean"
+        },
+        "phi_cleared": {
+          "default": false,
+          "title": "Phi Cleared",
+          "type": "boolean"
+        }
+      },
+      "title": "PolicyContext",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "actor_id": {
+      "minLength": 1,
+      "title": "Actor Id",
+      "type": "string"
+    },
+    "input_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Input Refs",
+      "type": "array"
+    },
+    "policy_context": {
+      "$ref": "#/$defs/PolicyContext"
+    },
+    "task_type": {
+      "const": "analysis_planning",
+      "default": "analysis_planning",
+      "title": "Task Type",
+      "type": "string"
+    },
+    "study_goal": {
+      "minLength": 10,
+      "title": "Study Goal",
+      "type": "string"
+    },
+    "dataset_ids": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Dataset Ids",
+      "type": "array"
+    },
+    "field_catalog": {
+      "items": {
+        "$ref": "#/$defs/DatasetField"
+      },
+      "title": "Field Catalog",
+      "type": "array"
+    },
+    "candidate_templates": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Candidate Templates",
+      "type": "array"
+    },
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "actor_id",
+    "study_goal",
+    "dataset_ids"
+  ],
+  "title": "AnalysisAgentRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

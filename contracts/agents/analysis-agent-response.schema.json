@@ -1,0 +1,136 @@
+{
+  "$defs": {
+    "AgentExecutionStatus": {
+      "enum": [
+        "ok",
+        "blocked",
+        "needs_human",
+        "failed"
+      ],
+      "title": "AgentExecutionStatus",
+      "type": "string"
+    },
+    "AnalysisAgentResult": {
+      "additionalProperties": false,
+      "properties": {
+        "template_id": {
+          "minLength": 1,
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_version": {
+          "minLength": 1,
+          "title": "Template Version",
+          "type": "string"
+        },
+        "parameter_json": {
+          "additionalProperties": true,
+          "title": "Parameter Json",
+          "type": "object"
+        },
+        "preflight_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Preflight Checks",
+          "type": "array"
+        },
+        "rationale": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rationale",
+          "type": "array"
+        }
+      },
+      "required": [
+        "template_id",
+        "template_version"
+      ],
+      "title": "AnalysisAgentResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "const": "analysis_agent",
+      "default": "analysis_agent",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentExecutionStatus"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "artifacts_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Artifacts Produced",
+      "type": "array"
+    },
+    "assertions_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assertions Produced",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "blocking_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Blocking Reasons",
+      "type": "array"
+    },
+    "needs_human_items": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Needs Human Items",
+      "type": "array"
+    },
+    "result": {
+      "$ref": "#/$defs/AnalysisAgentResult"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "status",
+    "confidence",
+    "result"
+  ],
+  "title": "AnalysisAgentResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

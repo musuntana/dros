@@ -1,0 +1,219 @@
+{
+  "$defs": {
+    "ArtifactDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "object_id": {
+          "minLength": 1,
+          "title": "Object Id",
+          "type": "string"
+        },
+        "object_type": {
+          "minLength": 1,
+          "title": "Object Type",
+          "type": "string"
+        },
+        "storage_uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage Uri"
+        },
+        "metrics_json": {
+          "additionalProperties": true,
+          "title": "Metrics Json",
+          "type": "object"
+        }
+      },
+      "required": [
+        "object_id",
+        "object_type"
+      ],
+      "title": "ArtifactDescriptor",
+      "type": "object"
+    },
+    "ComplianceLevel": {
+      "enum": [
+        "public",
+        "internal",
+        "clinical"
+      ],
+      "title": "ComplianceLevel",
+      "type": "string"
+    },
+    "DraftManuscriptBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "minLength": 1,
+          "title": "Block Id",
+          "type": "string"
+        },
+        "section_key": {
+          "$ref": "#/$defs/SectionKey"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "assertion_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assertion Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "block_id",
+        "section_key",
+        "text"
+      ],
+      "title": "DraftManuscriptBlock",
+      "type": "object"
+    },
+    "PolicyContext": {
+      "additionalProperties": false,
+      "properties": {
+        "compliance_level": {
+          "$ref": "#/$defs/ComplianceLevel",
+          "default": "internal"
+        },
+        "allow_external_llm": {
+          "default": false,
+          "title": "Allow External Llm",
+          "type": "boolean"
+        },
+        "phi_cleared": {
+          "default": false,
+          "title": "Phi Cleared",
+          "type": "boolean"
+        }
+      },
+      "title": "PolicyContext",
+      "type": "object"
+    },
+    "SectionKey": {
+      "enum": [
+        "title",
+        "abstract",
+        "introduction",
+        "methods",
+        "results",
+        "discussion",
+        "conclusion",
+        "figure_legend",
+        "table_note",
+        "appendix"
+      ],
+      "title": "SectionKey",
+      "type": "string"
+    },
+    "VerificationTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "object_type": {
+          "minLength": 1,
+          "title": "Object Type",
+          "type": "string"
+        },
+        "object_id": {
+          "minLength": 1,
+          "title": "Object Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "object_type",
+        "object_id"
+      ],
+      "title": "VerificationTarget",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "actor_id": {
+      "minLength": 1,
+      "title": "Actor Id",
+      "type": "string"
+    },
+    "input_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Input Refs",
+      "type": "array"
+    },
+    "policy_context": {
+      "$ref": "#/$defs/PolicyContext"
+    },
+    "task_type": {
+      "const": "verification",
+      "default": "verification",
+      "title": "Task Type",
+      "type": "string"
+    },
+    "targets": {
+      "items": {
+        "$ref": "#/$defs/VerificationTarget"
+      },
+      "minItems": 1,
+      "title": "Targets",
+      "type": "array"
+    },
+    "manuscript_blocks": {
+      "items": {
+        "$ref": "#/$defs/DraftManuscriptBlock"
+      },
+      "title": "Manuscript Blocks",
+      "type": "array"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ArtifactDescriptor"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "scope_checks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Scope Checks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "actor_id",
+    "targets"
+  ],
+  "title": "VerifierAgentRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

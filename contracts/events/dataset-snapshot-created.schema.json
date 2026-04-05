@@ -1,0 +1,150 @@
+{
+  "$defs": {
+    "DatasetSnapshotCreatedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_id": {
+          "format": "uuid",
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "format": "uuid",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "snapshot_no": {
+          "minimum": 1,
+          "title": "Snapshot No",
+          "type": "integer"
+        },
+        "source_kind": {
+          "enum": [
+            "upload",
+            "geo",
+            "tcga",
+            "seer",
+            "manual"
+          ],
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "input_hash_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "title": "Input Hash Sha256",
+          "type": "string"
+        },
+        "deid_status": {
+          "enum": [
+            "not_required",
+            "pending",
+            "completed",
+            "failed"
+          ],
+          "title": "Deid Status",
+          "type": "string"
+        },
+        "phi_scan_status": {
+          "enum": [
+            "pending",
+            "passed",
+            "blocked",
+            "needs_human"
+          ],
+          "title": "Phi Scan Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "snapshot_id",
+        "snapshot_no",
+        "source_kind",
+        "input_hash_sha256",
+        "deid_status",
+        "phi_scan_status"
+      ],
+      "title": "DatasetSnapshotCreatedPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_name": {
+      "const": "dataset.snapshot.created",
+      "default": "dataset.snapshot.created",
+      "title": "Event Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "produced_by": {
+      "minLength": 1,
+      "title": "Produced By",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/DatasetSnapshotCreatedPayload"
+    }
+  },
+  "required": [
+    "event_id",
+    "produced_by",
+    "trace_id",
+    "tenant_id",
+    "project_id",
+    "idempotency_key",
+    "occurred_at",
+    "payload"
+  ],
+  "title": "DatasetSnapshotCreatedEvent",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

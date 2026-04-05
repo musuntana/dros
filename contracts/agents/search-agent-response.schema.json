@@ -1,0 +1,261 @@
+{
+  "$defs": {
+    "AgentExecutionStatus": {
+      "enum": [
+        "ok",
+        "blocked",
+        "needs_human",
+        "failed"
+      ],
+      "title": "AgentExecutionStatus",
+      "type": "string"
+    },
+    "LicenseClass": {
+      "enum": [
+        "unknown",
+        "public",
+        "metadata_only",
+        "pmc_oa_subset",
+        "restricted",
+        "internal"
+      ],
+      "title": "LicenseClass",
+      "type": "string"
+    },
+    "SearchAgentResult": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "normalized_query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalized Query"
+        },
+        "search_strategy": {
+          "default": "entrez_structured",
+          "title": "Search Strategy",
+          "type": "string"
+        },
+        "rerank_applied": {
+          "default": false,
+          "title": "Rerank Applied",
+          "type": "boolean"
+        },
+        "search_results": {
+          "items": {
+            "$ref": "#/$defs/SearchResultItem"
+          },
+          "title": "Search Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "SearchAgentResult",
+      "type": "object"
+    },
+    "SearchResultItem": {
+      "additionalProperties": false,
+      "properties": {
+        "pmid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pmid"
+        },
+        "pmcid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pmcid"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "maximum": 2200,
+              "minimum": 1900,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        },
+        "abstract": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Abstract"
+        },
+        "license_class": {
+          "$ref": "#/$defs/LicenseClass",
+          "default": "unknown"
+        },
+        "oa_subset_flag": {
+          "default": false,
+          "title": "Oa Subset Flag",
+          "type": "boolean"
+        },
+        "match_reason": {
+          "minLength": 1,
+          "title": "Match Reason",
+          "type": "string"
+        },
+        "dedupe_key": {
+          "minLength": 1,
+          "title": "Dedupe Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "match_reason",
+        "dedupe_key"
+      ],
+      "title": "SearchResultItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "agent_name": {
+      "const": "search_agent",
+      "default": "search_agent",
+      "title": "Agent Name",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentExecutionStatus"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "artifacts_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Artifacts Produced",
+      "type": "array"
+    },
+    "assertions_produced": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assertions Produced",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "blocking_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Blocking Reasons",
+      "type": "array"
+    },
+    "needs_human_items": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Needs Human Items",
+      "type": "array"
+    },
+    "result": {
+      "$ref": "#/$defs/SearchAgentResult"
+    }
+  },
+  "required": [
+    "project_id",
+    "task_id",
+    "trace_id",
+    "status",
+    "confidence",
+    "result"
+  ],
+  "title": "SearchAgentResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

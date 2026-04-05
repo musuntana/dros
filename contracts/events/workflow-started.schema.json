@@ -1,0 +1,142 @@
+{
+  "$defs": {
+    "WorkflowStartedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "workflow_instance_id": {
+          "format": "uuid",
+          "title": "Workflow Instance Id",
+          "type": "string"
+        },
+        "workflow_type": {
+          "minLength": 1,
+          "title": "Workflow Type",
+          "type": "string"
+        },
+        "runtime_backend": {
+          "enum": [
+            "queue_workers",
+            "temporal"
+          ],
+          "title": "Runtime Backend",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "created",
+            "retrieving",
+            "retrieved",
+            "structuring",
+            "structured",
+            "analyzing",
+            "analyzed",
+            "asserting",
+            "asserted",
+            "writing",
+            "verifying",
+            "approved",
+            "blocked",
+            "needs_human",
+            "exported",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "input_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "workflow_instance_id",
+        "workflow_type",
+        "runtime_backend",
+        "state"
+      ],
+      "title": "WorkflowStartedPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_name": {
+      "const": "workflow.started",
+      "default": "workflow.started",
+      "title": "Event Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "minLength": 1,
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "produced_by": {
+      "minLength": 1,
+      "title": "Produced By",
+      "type": "string"
+    },
+    "trace_id": {
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "tenant_id": {
+      "format": "uuid",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/WorkflowStartedPayload"
+    }
+  },
+  "required": [
+    "event_id",
+    "produced_by",
+    "trace_id",
+    "tenant_id",
+    "project_id",
+    "idempotency_key",
+    "occurred_at",
+    "payload"
+  ],
+  "title": "WorkflowStartedEvent",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

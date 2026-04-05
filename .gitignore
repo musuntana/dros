@@ -1,0 +1,66 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Local tooling
+.claude/settings.local.json
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Node / frontend
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Runtime artifacts
+*.log
+*.pid
+*.sqlite3
+*.db
+*.tmp
+*.temp
+
+# Generated / cache
+.cache/
+.tmp/
+*.bak
+
+# Local app state
+.dros/
+
+# Packaging metadata
+pip-wheel-metadata/
