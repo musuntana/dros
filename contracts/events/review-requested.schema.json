@@ -28,6 +28,19 @@
           "title": "Target Id",
           "type": "string"
         },
+        "target_version_no": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Version No"
+        },
         "state": {
           "enum": [
             "pending",

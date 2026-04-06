@@ -15,6 +15,18 @@ export interface InspectorAction {
   href: string;
 }
 
+export interface InspectorRelationItem {
+  href: string;
+  label: string;
+  meta?: string;
+}
+
+export interface InspectorRelationGroup {
+  empty: string;
+  items: InspectorRelationItem[];
+  title: string;
+}
+
 export interface InspectorSection {
   title: string;
   items: InspectorItem[];
@@ -28,13 +40,18 @@ export interface InspectorFocus {
   items: InspectorItem[];
   actions: InspectorAction[];
   payload: Record<string, unknown>;
+  relations?: InspectorRelationGroup[];
 }
 
 export function InspectorPanel({
   focus,
+  onResetFocus,
+  resetFocusLabel,
   sections,
 }: {
   focus?: InspectorFocus | null;
+  onResetFocus?: (() => void) | null;
+  resetFocusLabel?: string | null;
   sections: InspectorSection[];
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -55,14 +72,26 @@ export function InspectorPanel({
     >
       <div className="flex items-center justify-between gap-3">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Inspector</p>
-        <button
-          className="rounded-full border border-subtle bg-app px-3 py-2 text-xs font-semibold text-strong xl:hidden"
-          data-testid="workspace-inspector-toggle"
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-        >
-          {expanded ? "Hide details" : "Show details"}
-        </button>
+        <div className="flex items-center gap-2">
+          {onResetFocus && resetFocusLabel ? (
+            <button
+              className="rounded-full border border-subtle bg-app px-3 py-2 text-xs font-semibold text-strong"
+              data-testid="workspace-inspector-reset"
+              onClick={onResetFocus}
+              type="button"
+            >
+              {resetFocusLabel}
+            </button>
+          ) : null}
+          <button
+            className="rounded-full border border-subtle bg-app px-3 py-2 text-xs font-semibold text-strong xl:hidden"
+            data-testid="workspace-inspector-toggle"
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+          >
+            {expanded ? "Hide details" : "Show details"}
+          </button>
+        </div>
       </div>
       <div className={`mt-4 space-y-5 ${expanded ? "block" : "hidden"} xl:block xl:overflow-y-auto xl:pr-1`}>
         {focus ? (
@@ -102,6 +131,33 @@ export function InspectorPanel({
                   >
                     {action.label}
                   </Link>
+                ))}
+              </div>
+            ) : null}
+            {focus.relations?.length ? (
+              <div className="mt-5 space-y-4">
+                {focus.relations.map((group) => (
+                  <section key={`${focus.id}:${group.title}`}>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">{group.title}</p>
+                    {group.items.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {group.items.map((item) => (
+                          <Link
+                            key={`${group.title}:${item.label}:${item.href}`}
+                            className="block rounded-2xl border border-primary/15 bg-surface px-3 py-3 transition hover:border-primary/30 hover:bg-primary/10"
+                            href={item.href}
+                          >
+                            <p className="text-sm font-semibold text-primary">{item.label}</p>
+                            {item.meta ? <p className="mt-1 text-xs text-muted">{item.meta}</p> : null}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 rounded-2xl border border-subtle bg-surface px-3 py-3 text-sm text-muted">
+                        {group.empty}
+                      </p>
+                    )}
+                  </section>
                 ))}
               </div>
             ) : null}

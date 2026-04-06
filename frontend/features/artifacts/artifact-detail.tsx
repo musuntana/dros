@@ -9,6 +9,7 @@ import type {
 } from "@/lib/api/generated/control-plane";
 import { formatDateTime } from "@/lib/format/date";
 
+import { ArtifactLineageGraph } from "@/features/artifacts/artifact-lineage-graph";
 import { StatusBadge } from "@/components/status/status-badge";
 
 export function ArtifactDetail({
@@ -106,6 +107,8 @@ export function ArtifactDetail({
           </div>
         </div>
       </section>
+
+      <ArtifactLineageGraph artifactId={artifact.id} projectId={projectId} />
 
       <section className="grid gap-6 xl:grid-cols-2">
         <div className="rounded-card border border-subtle bg-surface p-5 shadow-soft">

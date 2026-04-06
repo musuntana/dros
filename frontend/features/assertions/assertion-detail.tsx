@@ -101,7 +101,12 @@ export function AssertionDetail({
                       <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                         {link.relation_type}
                       </p>
-                      <p className="mt-2 break-all text-sm text-strong">{link.evidence_source_id}</p>
+                      <Link
+                        className="mt-2 block break-all text-sm font-medium text-primary"
+                        href={`/projects/${projectId}/evidence-links/${link.id}`}
+                      >
+                        {link.evidence_source_id}
+                      </Link>
                     </div>
                     <StatusBadge label={link.verifier_status} />
                   </div>

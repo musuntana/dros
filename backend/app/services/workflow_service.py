@@ -148,14 +148,36 @@ class WorkflowService(BaseService):
 
     def create_workflow(self, project_id: UUID, payload: CreateWorkflowRequest) -> CreateWorkflowResponse:
         self._require_project(project_id, "workflows:write")
+        parent_workflow = None
+        initial_state = WorkflowState.CREATED
+        current_step = "created"
+        start_task_state = TaskState.PENDING
+        start_task_completed_at = None
+
+        if payload.parent_workflow_id is not None:
+            parent_workflow = self._require_workflow(project_id, payload.parent_workflow_id, "workflows:write")
+            if payload.workflow_type != parent_workflow.workflow_type:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=(
+                        "child workflow_type must match parent workflow_type for "
+                        "rollback/resume branches"
+                    ),
+                )
+            if parent_workflow.state not in TERMINAL_WORKFLOW_STATES:
+                initial_state = parent_workflow.state
+                current_step = parent_workflow.current_step
+            start_task_state = TaskState.COMPLETED
+            start_task_completed_at = self.now()
+
         now = self.now()
         workflow = WorkflowInstanceRead(
             id=uuid4(),
             tenant_id=self.repository.tenant_id,
             project_id=project_id,
             workflow_type=payload.workflow_type,
-            state=WorkflowState.CREATED,
-            current_step="created",
+            state=initial_state,
+            current_step=current_step,
             parent_workflow_id=payload.parent_workflow_id,
             started_by=payload.started_by or self.repository.principal_id,
             runtime_backend=payload.runtime_backend,
@@ -170,25 +192,85 @@ class WorkflowService(BaseService):
             workflow_instance_id=workflow.id,
             task_key="start",
             task_type=payload.workflow_type,
-            state=TaskState.PENDING,
+            state=start_task_state,
             assignee_id=workflow.started_by,
             input_payload_json=payload.model_dump(),
-            output_payload_json={},
+            output_payload_json=(
+                {
+                    "branch_type": "child_workflow",
+                    "parent_workflow_id": str(parent_workflow.id),
+                    "parent_state": parent_workflow.state.value,
+                    "parent_current_step": parent_workflow.current_step,
+                    "initial_state": initial_state.value,
+                }
+                if parent_workflow is not None
+                else {}
+            ),
             retry_count=0,
             scheduled_at=now,
-            completed_at=None,
+            completed_at=start_task_completed_at,
             created_at=now,
         )
         self.repository.store.workflow_tasks[task.id] = task
+
+        if parent_workflow is not None:
+            branch_task = WorkflowTaskRead(
+                id=uuid4(),
+                tenant_id=self.repository.tenant_id,
+                project_id=project_id,
+                workflow_instance_id=workflow.id,
+                task_key="resume_from_parent",
+                task_type="workflow_branch",
+                state=TaskState.COMPLETED,
+                assignee_id=workflow.started_by,
+                input_payload_json={
+                    "parent_workflow_id": str(parent_workflow.id),
+                    "parent_state": parent_workflow.state.value,
+                    "parent_current_step": parent_workflow.current_step,
+                },
+                output_payload_json={
+                    "child_workflow_id": str(workflow.id),
+                    "initial_state": workflow.state.value,
+                    "initial_current_step": workflow.current_step,
+                },
+                retry_count=0,
+                scheduled_at=now,
+                completed_at=now,
+                created_at=now,
+            )
+            self.repository.store.workflow_tasks[branch_task.id] = branch_task
+
         append_audit_event(
             self.repository.store,
             project_id=project_id,
             event_type="workflow.started",
             target_kind=LineageKind.WORKFLOW_INSTANCE,
             target_id=workflow.id,
-            payload_json={"workflow_type": payload.workflow_type},
+            payload_json={
+                "workflow_type": payload.workflow_type,
+                "parent_workflow_id": str(parent_workflow.id) if parent_workflow is not None else None,
+                "initial_state": workflow.state.value,
+                "initial_current_step": workflow.current_step,
+            },
             actor_id=self.repository.actor_id,
         )
+        if parent_workflow is not None:
+            append_audit_event(
+                self.repository.store,
+                project_id=project_id,
+                event_type="workflow.branch.created",
+                target_kind=LineageKind.WORKFLOW_INSTANCE,
+                target_id=workflow.id,
+                payload_json={
+                    "parent_workflow_id": str(parent_workflow.id),
+                    "parent_state": parent_workflow.state.value,
+                    "parent_current_step": parent_workflow.current_step,
+                    "child_workflow_id": str(workflow.id),
+                    "child_initial_state": workflow.state.value,
+                    "child_initial_current_step": workflow.current_step,
+                },
+                actor_id=self.repository.actor_id,
+            )
         return CreateWorkflowResponse(workflow=workflow)
 
     def list_workflows(self, project_id: UUID, *, limit: int, offset: int) -> WorkflowListResponse:
@@ -290,6 +372,14 @@ class WorkflowService(BaseService):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"template {payload.template_id} not found")
         if payload.workflow_instance_id is not None:
             self._require_workflow(project_id, payload.workflow_instance_id, "workflows:write")
+        rerun_of_run = None
+        if payload.rerun_of_run_id is not None:
+            rerun_of_run = self._require_analysis_run(project_id, payload.rerun_of_run_id, "workflows:write")
+            self._validate_rerun_target(
+                rerun_of_run=rerun_of_run,
+                snapshot_id=payload.snapshot_id,
+                template_id=payload.template_id,
+            )
 
         params_blob = json.dumps(payload.params_json, sort_keys=True).encode("utf-8")
         param_hash = sha256(params_blob).hexdigest()
@@ -316,6 +406,7 @@ class WorkflowService(BaseService):
                 "artifact_emitter": "inline",
                 "template_code": template.code,
                 "template_version": template.version,
+                "rerun_of_run_id": str(rerun_of_run.id) if rerun_of_run is not None else None,
             },
             input_artifact_manifest_json=[
                 {
@@ -327,7 +418,7 @@ class WorkflowService(BaseService):
             started_at=None,
             finished_at=None,
             exit_code=None,
-            rerun_of_run_id=None,
+            rerun_of_run_id=rerun_of_run.id if rerun_of_run is not None else None,
             job_ref=None,
             error_class=None,
             error_message_trunc=None,
@@ -356,6 +447,7 @@ class WorkflowService(BaseService):
                 "snapshot_id": str(payload.snapshot_id),
                 "template_id": str(payload.template_id),
                 "workflow_instance_id": str(payload.workflow_instance_id) if payload.workflow_instance_id else None,
+                "rerun_of_run_id": str(rerun_of_run.id) if rerun_of_run is not None else None,
                 "repro_fingerprint": repro_fingerprint,
             },
         )
@@ -365,6 +457,30 @@ class WorkflowService(BaseService):
             template=template,
         )
         return CreateAnalysisRunResponse(analysis_run=executed_run)
+
+    def _validate_rerun_target(
+        self,
+        *,
+        rerun_of_run: AnalysisRunRead,
+        snapshot_id: UUID,
+        template_id: UUID,
+    ) -> None:
+        if rerun_of_run.snapshot_id != snapshot_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    "rerun_of_run_id must reference an analysis run with the same snapshot_id; "
+                    f"expected {rerun_of_run.snapshot_id}, got {snapshot_id}"
+                ),
+            )
+        if rerun_of_run.template_id != template_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    "rerun_of_run_id must reference an analysis run with the same template_id; "
+                    f"expected {rerun_of_run.template_id}, got {template_id}"
+                ),
+            )
 
     def list_analysis_runs(self, project_id: UUID, *, limit: int, offset: int) -> AnalysisRunListResponse:
         self._require_project(project_id, "workflows:read")

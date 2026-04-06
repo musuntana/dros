@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 from .auth import bind_auth_context, reset_auth_context, resolve_auth_context
 from .routers import ROUTERS
 from .services.base import ServiceNotImplementedError
+from .settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -15,6 +20,30 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         openapi_url="/openapi.json",
     )
+
+    settings = get_settings()
+
+    if settings.ledger_backend == "postgres_rowlevel":
+
+        @app.on_event("startup")
+        def _init_pg_pool() -> None:
+            from .db.pool import init_pool
+
+            assert settings.postgres_dsn is not None
+            init_pool(
+                settings.postgres_dsn,
+                min_size=settings.postgres_pool_min,
+                max_size=settings.postgres_pool_max,
+                schema=settings.postgres_schema,
+            )
+            logger.info("PostgreSQL row-level pool initialised (schema=%s)", settings.postgres_schema)
+
+        @app.on_event("shutdown")
+        def _close_pg_pool() -> None:
+            from .db.pool import close_pool
+
+            close_pool()
+            logger.info("PostgreSQL row-level pool closed")
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:

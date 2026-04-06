@@ -264,9 +264,16 @@ export async function createEvidenceLinkAction(
   }
 }
 
-export async function verifyEvidenceLinkAction(projectId: string, linkId: string): Promise<void> {
+export async function verifyEvidenceLinkAction(
+  projectId: string,
+  linkId: string,
+  returnPath: string | undefined,
+  _formData: FormData,
+): Promise<void> {
   const client = await createServerControlPlaneClient({ cache: "no-store" });
   await client.verifyEvidenceLink(projectId, linkId);
   revalidatePath(`/projects/${projectId}/evidence`);
-  redirect(`/projects/${projectId}/evidence`);
+  revalidatePath(`/projects/${projectId}/assertions`);
+  revalidatePath(`/projects/${projectId}/evidence-links/${linkId}`);
+  redirect(returnPath ?? `/projects/${projectId}/evidence`);
 }

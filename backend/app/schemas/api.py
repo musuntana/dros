@@ -20,6 +20,7 @@ from .domain import (
     BlockAssertionLinkRead,
     DatasetRead,
     DatasetSnapshotRead,
+    EvidenceChunkRead,
     EvidenceLinkRead,
     EvidenceSourceRead,
     ExportJobRead,
@@ -102,12 +103,20 @@ class CreateProjectResponse(DRBaseModel):
     project: ProjectRead
 
 
+class ReviewSummaryScopeRead(DRBaseModel):
+    target_kind: LineageKind
+    target_id: UUID
+    target_version_no: int | None = Field(default=None, ge=1)
+    label: str | None = None
+
+
 class ProjectDetailResponse(DRBaseModel):
     project: ProjectRead
     active_workflows: list[WorkflowInstanceRead] = Field(default_factory=list)
     latest_snapshot: DatasetSnapshotRead | None = None
     active_manuscript: ManuscriptRead | None = None
     review_summary: dict[str, int] = Field(default_factory=dict)
+    review_summary_scope: ReviewSummaryScopeRead | None = None
 
 
 class ProjectListResponse(DRBaseModel):
@@ -244,6 +253,7 @@ class CreateAnalysisRunRequest(DRBaseModel):
     params_json: dict[str, Any] = Field(default_factory=dict)
     random_seed: int = 0
     workflow_instance_id: UUID | None = None
+    rerun_of_run_id: UUID | None = None
 
 
 class CreateAnalysisRunResponse(DRBaseModel):
@@ -266,6 +276,7 @@ class AnalysisRunListResponse(DRBaseModel):
 class CreateArtifactRequest(DRBaseModel):
     run_id: UUID | None = None
     artifact_type: ArtifactType
+    output_slot: str | None = None
     storage_uri: str = Field(min_length=1)
     mime_type: str | None = None
     sha256: str = Field(min_length=64, max_length=64)
@@ -382,6 +393,34 @@ class EvidenceSourceListResponse(DRBaseModel):
     items: Page[EvidenceSourceRead]
 
 
+class CreateEvidenceChunkRequest(DRBaseModel):
+    text: str = Field(min_length=1)
+    section_label: str | None = None
+    char_start: int = Field(default=0, ge=0)
+
+
+class CreateEvidenceChunkResponse(DRBaseModel):
+    evidence_chunk: EvidenceChunkRead
+
+
+class EvidenceChunkListResponse(DRBaseModel):
+    items: Page[EvidenceChunkRead]
+
+
+class EvidenceChunkDetailResponse(DRBaseModel):
+    evidence_chunk: EvidenceChunkRead
+    evidence_source: EvidenceSourceRead
+
+
+class EvidenceLinkDetailResponse(DRBaseModel):
+    evidence_link: EvidenceLinkRead
+    assertion: AssertionRead
+    evidence_source: EvidenceSourceRead
+    source_chunk: EvidenceChunkRead | None = None
+    source_artifact: ArtifactRead | None = None
+    source_run: AnalysisRunRead | None = None
+
+
 class CreateEvidenceLinkRequest(DRBaseModel):
     assertion_id: UUID
     evidence_source_id: UUID
@@ -473,6 +512,7 @@ class CreateReviewRequest(DRBaseModel):
     review_type: ReviewType
     target_kind: LineageKind
     target_id: UUID
+    target_version_no: int | None = Field(default=None, ge=1)
     reviewer_id: UUID | None = None
     checklist_json: list[dict[str, Any]] = Field(default_factory=list)
     comments: str | None = None

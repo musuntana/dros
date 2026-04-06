@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import type { ArtifactRead, ExportJobRead, ManuscriptRead } from "@/lib/api/generated/control-plane";
@@ -115,7 +116,12 @@ export function ExportsDashboard({
                       <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                         {job.format}
                       </p>
-                      <p className="mt-2 break-all text-sm font-medium text-strong">{job.id}</p>
+                      <Link
+                        className="mt-2 block break-all text-sm font-medium text-primary"
+                        href={`/projects/${projectId}/exports/${job.id}`}
+                      >
+                        {job.id}
+                      </Link>
                       <p className="mt-2 text-xs text-muted">
                         requested {formatDateTime(job.requested_at)}
                         {job.completed_at ? ` · completed ${formatDateTime(job.completed_at)}` : ""}
@@ -143,7 +149,12 @@ export function ExportsDashboard({
               exportArtifacts.map((artifact) => (
                 <article key={artifact.id} className="rounded-2xl border border-subtle bg-app px-4 py-4">
                   <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">{artifact.artifact_type}</p>
-                  <p className="mt-2 break-all text-sm font-medium text-strong">{artifact.storage_uri}</p>
+                  <Link
+                    className="mt-2 block break-all text-sm font-medium text-primary"
+                    href={`/projects/${projectId}/artifacts/${artifact.id}`}
+                  >
+                    {artifact.storage_uri}
+                  </Link>
                   <p className="mt-2 text-xs text-muted">{formatDateTime(artifact.created_at)}</p>
                   <p className="mt-2 break-all font-mono text-xs text-strong">{artifact.id}</p>
                 </article>

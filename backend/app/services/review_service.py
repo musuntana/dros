@@ -19,6 +19,7 @@ from ..schemas.api import (
 )
 from ..schemas.domain import (
     AssertionRead,
+    DatasetSnapshotRead,
     GateEvaluationRead,
     ManuscriptBlockRead,
     ManuscriptRead,
@@ -48,6 +49,7 @@ class ReviewService(BaseService):
 
     def create_review(self, project_id: UUID, payload: CreateReviewRequest) -> CreateReviewResponse:
         self._require_project(project_id, "reviews:write")
+        target_version_no = self._resolve_target_version_no(project_id, payload)
         review = ReviewRead(
             id=uuid4(),
             tenant_id=self.repository.tenant_id,
@@ -55,6 +57,7 @@ class ReviewService(BaseService):
             review_type=payload.review_type,
             target_kind=payload.target_kind,
             target_id=payload.target_id,
+            target_version_no=target_version_no,
             state=ReviewState.PENDING,
             reviewer_id=payload.reviewer_id,
             checklist_json=payload.checklist_json,
@@ -73,6 +76,7 @@ class ReviewService(BaseService):
                 "review_type": review.review_type.value,
                 "target_kind": review.target_kind.value,
                 "target_id": str(review.target_id),
+                "target_version_no": review.target_version_no,
                 "reviewer_id": str(review.reviewer_id) if review.reviewer_id else None,
             },
             actor_id=self.repository.actor_id,
@@ -88,6 +92,7 @@ class ReviewService(BaseService):
                 "review_type": review.review_type.value,
                 "target_kind": review.target_kind.value,
                 "target_id": str(review.target_id),
+                "target_version_no": review.target_version_no,
                 "state": review.state.value,
             },
             actor_id=self.repository.actor_id,
@@ -127,7 +132,14 @@ class ReviewService(BaseService):
             event_type="review.decision.recorded",
             target_kind=LineageKind.REVIEW,
             target_id=updated.id,
-            payload_json={"action": payload.action, "state": updated.state.value, "comments": payload.comments},
+            payload_json={
+                "action": payload.action,
+                "state": updated.state.value,
+                "comments": payload.comments,
+                "target_kind": updated.target_kind.value,
+                "target_id": str(updated.target_id),
+                "target_version_no": updated.target_version_no,
+            },
             actor_id=self.repository.actor_id,
         )
         append_audit_event(
@@ -141,6 +153,7 @@ class ReviewService(BaseService):
                 "review_type": updated.review_type.value,
                 "target_kind": updated.target_kind.value,
                 "target_id": str(updated.target_id),
+                "target_version_no": updated.target_version_no,
                 "state": updated.state.value,
                 "reviewer_id": str(updated.reviewer_id) if updated.reviewer_id else None,
                 "decided_at": updated.decided_at.isoformat() if updated.decided_at else None,
@@ -307,12 +320,15 @@ class ReviewService(BaseService):
         )
         if snapshot is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"dataset {dataset_id} has no snapshot")
-        blocking_reasons: list[str] = []
-        allowed = snapshot.phi_scan_status.value in {"passed", "needs_human"} and snapshot.deid_status.value != "failed"
-        if snapshot.phi_scan_status.value == "blocked":
-            blocking_reasons.append("phi_scan_blocked")
-        if snapshot.deid_status.value == "failed":
-            blocking_reasons.append("deidentification_failed")
+        blocking_reasons = self._dataset_policy_blocking_reasons(snapshot)
+        allowed = not blocking_reasons
+        if blocking_reasons:
+            self._append_dataset_snapshot_blocked_event(
+                project_id=project_id,
+                dataset_id=dataset.id,
+                snapshot=snapshot,
+                blocking_reasons=blocking_reasons,
+            )
         return DatasetPolicyCheckResponse(
             snapshot_id=snapshot.id,
             phi_scan_status=snapshot.phi_scan_status.value,
@@ -337,17 +353,26 @@ class ReviewService(BaseService):
             }
         )
         self.repository.store.evidence_links[link.id] = updated
+        evidence_source = self.repository.store.evidence_sources.get(updated.evidence_source_id)
+        candidate_identifier = evidence_source.external_id_norm if evidence_source is not None else None
         append_audit_event(
             self.repository.store,
             project_id=project_id,
-            event_type="evidence.link.verified",
-            target_kind=LineageKind.EVIDENCE_SOURCE,
-            target_id=updated.evidence_source_id,
+            event_type="evidence.blocked" if reasons else "evidence.linked",
+            target_kind=LineageKind.ASSERTION,
+            target_id=updated.assertion_id,
             payload_json={
-                "link_id": str(link_id),
+                "assertion_id": str(updated.assertion_id),
+                "evidence_link_id": str(link_id),
+                "evidence_source_id": str(updated.evidence_source_id),
+                "candidate_identifier": candidate_identifier,
+                "relation_type": updated.relation_type.value,
                 "verifier_status": updated.verifier_status.value,
+                "reason": "; ".join(reasons) if reasons else None,
+                "needs_human_items": reasons,
                 "reasons": reasons,
             },
+            actor_id=self.repository.actor_id,
         )
         return VerifyEvidenceLinkResponse(evidence_link=updated)
 
@@ -371,6 +396,74 @@ class ReviewService(BaseService):
             "review",
             required_scopes=tuple(required_scopes),
         )
+
+    def _dataset_policy_blocking_reasons(self, snapshot: DatasetSnapshotRead) -> list[str]:
+        blocking_reasons: list[str] = []
+        if snapshot.phi_scan_status.value == "pending":
+            blocking_reasons.append("phi_scan_pending")
+        elif snapshot.phi_scan_status.value == "blocked":
+            blocking_reasons.append("phi_scan_blocked")
+
+        if snapshot.deid_status.value == "pending":
+            blocking_reasons.append("deidentification_pending")
+        elif snapshot.deid_status.value == "failed":
+            blocking_reasons.append("deidentification_failed")
+        return blocking_reasons
+
+    def _append_dataset_snapshot_blocked_event(
+        self,
+        *,
+        project_id: UUID,
+        dataset_id: UUID,
+        snapshot: DatasetSnapshotRead,
+        blocking_reasons: list[str],
+    ) -> None:
+        reason = "; ".join(blocking_reasons)
+        for event in self.repository.store.audit_events.values():
+            if (
+                event.project_id == project_id
+                and event.event_type == "dataset.snapshot.blocked"
+                and event.target_id == snapshot.id
+                and (event.payload_json or {}).get("reason") == reason
+                and (event.payload_json or {}).get("blocked_checks") == blocking_reasons
+            ):
+                return
+
+        append_audit_event(
+            self.repository.store,
+            project_id=project_id,
+            event_type="dataset.snapshot.blocked",
+            target_kind=LineageKind.DATASET_SNAPSHOT,
+            target_id=snapshot.id,
+            payload_json={
+                "dataset_id": str(dataset_id),
+                "snapshot_id": str(snapshot.id),
+                "blocked_checks": blocking_reasons,
+                "reason": reason,
+            },
+            actor_id=self.repository.actor_id,
+        )
+
+    def _resolve_target_version_no(self, project_id: UUID, payload: CreateReviewRequest) -> int | None:
+        if payload.target_kind != LineageKind.MANUSCRIPT:
+            if payload.target_version_no is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="target_version_no is only supported for manuscript reviews",
+                )
+            return None
+
+        manuscript = self._require_manuscript(project_id, payload.target_id, "reviews:write")
+        target_version_no = payload.target_version_no or manuscript.current_version_no
+        if target_version_no > manuscript.current_version_no:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"target_version_no {target_version_no} is ahead of manuscript current_version_no "
+                    f"{manuscript.current_version_no}"
+                ),
+            )
+        return target_version_no
 
     def _list_current_blocks(self, project_id: UUID, manuscript: ManuscriptRead) -> list[ManuscriptBlockRead]:
         blocks = [

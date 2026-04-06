@@ -1,5 +1,5 @@
 import { createServerControlPlaneClient } from "@/lib/api/control-plane/client";
-import type { AssertionRead, EvidenceSourceRead } from "@/lib/api/generated/control-plane";
+import type { AssertionRead, EvidenceLinkDetailResponse, EvidenceSourceRead } from "@/lib/api/generated/control-plane";
 import type { EvidenceLinkRecord } from "@/features/evidence/types";
 
 export async function getEvidencePageData(projectId: string): Promise<{
@@ -39,4 +39,12 @@ export async function getEvidencePageData(projectId: string): Promise<{
     linkRecords,
     sources,
   };
+}
+
+export async function getEvidenceLinkDetailPageData(
+  projectId: string,
+  linkId: string,
+): Promise<EvidenceLinkDetailResponse> {
+  const client = await createServerControlPlaneClient({ cache: "no-store" });
+  return client.getEvidenceLink(projectId, linkId);
 }

@@ -22,6 +22,8 @@ import type {
   CreateDatasetSnapshotRequest,
   CreateDatasetSnapshotResponse,
   CreateDatasetResponse,
+  CreateEvidenceChunkRequest,
+  CreateEvidenceChunkResponse,
   CreateEvidenceLinkRequest,
   CreateEvidenceLinkResponse,
   CreateExportJobRequest,
@@ -45,6 +47,9 @@ import type {
   DatasetListResponse,
   DatasetPolicyCheckResponse,
   DatasetSnapshotListResponse,
+  EvidenceChunkDetailResponse,
+  EvidenceChunkListResponse,
+  EvidenceLinkDetailResponse,
   EvidenceSearchRequest,
   EvidenceSearchResponse,
   EvidenceLinkListResponse,
@@ -321,8 +326,36 @@ export class ControlPlaneClient {
     return this.request("GET", controlPlaneRoutes.projects.evidence(projectId), { query: params });
   }
 
+  async createEvidenceChunk(
+    projectId: string,
+    evidenceSourceId: string,
+    payload: CreateEvidenceChunkRequest,
+  ): Promise<CreateEvidenceChunkResponse> {
+    return this.request("POST", controlPlaneRoutes.projects.evidenceChunks(projectId, evidenceSourceId), {
+      body: payload,
+    });
+  }
+
+  async listEvidenceChunks(
+    projectId: string,
+    evidenceSourceId: string,
+    params: PaginationParams = {},
+  ): Promise<EvidenceChunkListResponse> {
+    return this.request("GET", controlPlaneRoutes.projects.evidenceChunks(projectId, evidenceSourceId), {
+      query: params,
+    });
+  }
+
+  async getEvidenceChunk(projectId: string, chunkId: string): Promise<EvidenceChunkDetailResponse> {
+    return this.request("GET", controlPlaneRoutes.projects.evidenceChunk(projectId, chunkId));
+  }
+
   async listEvidenceLinks(projectId: string, params: PaginationParams = {}): Promise<EvidenceLinkListResponse> {
     return this.request("GET", controlPlaneRoutes.projects.evidenceLinks(projectId), { query: params });
+  }
+
+  async getEvidenceLink(projectId: string, linkId: string): Promise<EvidenceLinkDetailResponse> {
+    return this.request("GET", controlPlaneRoutes.projects.evidenceLink(projectId, linkId));
   }
 
   async createEvidenceLink(

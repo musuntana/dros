@@ -13,10 +13,16 @@ export default async function ProjectLayout({
 }) {
   try {
     const { projectId } = await params;
-    const { detail, initialEvents, session } = await getProjectWorkspaceData(projectId);
+    const { detail, initialEvents, members, projection, session } = await getProjectWorkspaceData(projectId);
 
     return (
-      <WorkspaceShell detail={detail} initialEvents={initialEvents} session={session}>
+      <WorkspaceShell
+        detail={detail}
+        initialEvents={initialEvents}
+        members={members}
+        projection={projection}
+        session={session}
+      >
         {children}
       </WorkspaceShell>
     );

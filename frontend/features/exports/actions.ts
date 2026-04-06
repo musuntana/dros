@@ -56,13 +56,5 @@ export async function createExportJobAction(
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/projects/${projectId}/exports`);
   revalidatePath(`/projects/${projectId}/artifacts`);
-
-  if (response.export_job.output_artifact_id) {
-    redirect(`/projects/${projectId}/artifacts/${response.export_job.output_artifact_id}`);
-  }
-
-  return {
-    message: `Export job ${response.export_job.id.slice(0, 8)} created with state ${response.export_job.state}.`,
-    status: "success",
-  };
+  redirect(`/projects/${projectId}/exports/${response.export_job.id}`);
 }

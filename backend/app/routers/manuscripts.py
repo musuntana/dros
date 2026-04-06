@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from ..dependencies import get_manuscript_service
 from ..schemas.api import (
@@ -62,9 +62,10 @@ def create_block(
 def list_blocks(
     project_id: UUID,
     manuscript_id: UUID,
+    version_no: int | None = Query(default=None, ge=1),
     service: ManuscriptService = Depends(get_manuscript_service),
 ) -> ManuscriptBlockListResponse:
-    return service.list_blocks(project_id, manuscript_id)
+    return service.list_blocks(project_id, manuscript_id, version_no=version_no)
 
 
 @router.post("/manuscripts/{manuscript_id}/versions", response_model=CreateManuscriptVersionResponse, status_code=status.HTTP_201_CREATED)

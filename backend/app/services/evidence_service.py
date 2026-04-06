@@ -9,8 +9,13 @@ from fastapi import HTTPException, status
 from ..repositories.base import append_audit_event
 from ..schemas.agents import SearchResultItem
 from ..schemas.api import (
+    CreateEvidenceChunkRequest,
+    CreateEvidenceChunkResponse,
     CreateEvidenceLinkRequest,
     CreateEvidenceLinkResponse,
+    EvidenceChunkDetailResponse,
+    EvidenceChunkListResponse,
+    EvidenceLinkDetailResponse,
     EvidenceSearchRequest,
     EvidenceLinkListResponse,
     EvidenceSearchResponse,
@@ -20,7 +25,16 @@ from ..schemas.api import (
     UpsertEvidenceSourceRequest,
     UpsertEvidenceSourceResponse,
 )
-from ..schemas.domain import EvidenceLinkRead, EvidenceSourceRead, LineageEdgeRead, WorkflowInstanceRead, WorkflowTaskRead
+from ..schemas.domain import (
+    AnalysisRunRead,
+    ArtifactRead,
+    EvidenceChunkRead,
+    EvidenceLinkRead,
+    EvidenceSourceRead,
+    LineageEdgeRead,
+    WorkflowInstanceRead,
+    WorkflowTaskRead,
+)
 from ..schemas.enums import (
     LineageEdgeType,
     LineageKind,
@@ -31,6 +45,22 @@ from ..schemas.enums import (
 )
 from .base import BaseService
 from .ncbi_adapter import NCBIAdapter, NCBIAdapterError, NCBIEvidenceRecord
+
+INLINE_CHUNK_SECTION_LABEL = "inline_preview"
+INLINE_PREVIEW_KEYS = (
+    "chunk_text",
+    "excerpt_text",
+    "snippet_text",
+    "preview_text",
+    "abstract_text",
+    "abstract",
+    "summary",
+    "text",
+    "content",
+    "body",
+    "quote",
+)
+OBJECT_TEXT_KEYS = ("text", "value", "content", "body", "abstract", "excerpt", "snippet", "preview", "quote")
 
 
 @dataclass(slots=True)
@@ -218,6 +248,52 @@ class EvidenceService(BaseService):
         sources.sort(key=lambda source: source.cached_at, reverse=True)
         return EvidenceSourceListResponse(items=self.paginate(sources, limit=limit, offset=offset))
 
+    def create_source_chunk(
+        self,
+        project_id: UUID,
+        evidence_source_id: UUID,
+        payload: CreateEvidenceChunkRequest,
+    ) -> CreateEvidenceChunkResponse:
+        source = self._require_source_in_project(project_id, evidence_source_id, "evidence:write")
+        chunk = self._create_source_chunk_record(
+            project_id,
+            source.id,
+            text=payload.text,
+            section_label=payload.section_label,
+            char_start=payload.char_start,
+        )
+        return CreateEvidenceChunkResponse(evidence_chunk=chunk)
+
+    def list_source_chunks(
+        self,
+        project_id: UUID,
+        evidence_source_id: UUID,
+        *,
+        limit: int,
+        offset: int,
+    ) -> EvidenceChunkListResponse:
+        source = self._require_source_in_project(project_id, evidence_source_id, "evidence:read")
+        chunks = sorted(
+            [
+                chunk
+                for chunk in self.repository.store.evidence_chunks.values()
+                if chunk.evidence_source_id == source.id
+            ],
+            key=lambda chunk: (chunk.chunk_no, chunk.created_at),
+        )
+        return EvidenceChunkListResponse(items=self.paginate(chunks, limit=limit, offset=offset))
+
+    def get_source_chunk(self, project_id: UUID, chunk_id: UUID) -> EvidenceChunkDetailResponse:
+        self._require_project(project_id, "evidence:read")
+        chunk = self.repository.store.evidence_chunks.get(chunk_id)
+        if chunk is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"evidence chunk {chunk_id} not found",
+            )
+        source = self._require_source_in_project(project_id, chunk.evidence_source_id, "evidence:read")
+        return EvidenceChunkDetailResponse(evidence_chunk=chunk, evidence_source=source)
+
     def list_evidence_links(self, project_id: UUID, *, limit: int, offset: int) -> EvidenceLinkListResponse:
         self._require_project(project_id, "evidence:read")
         links = sorted(
@@ -231,11 +307,46 @@ class EvidenceService(BaseService):
         )
         return EvidenceLinkListResponse(items=self.paginate(links, limit=limit, offset=offset))
 
+    def get_evidence_link(self, project_id: UUID, link_id: UUID) -> EvidenceLinkDetailResponse:
+        self._require_project(project_id, "evidence:read")
+        link = self.repository.require_project_scoped(
+            "evidence_links",
+            project_id,
+            link_id,
+            "evidence link",
+            required_scopes=("evidence:read",),
+        )
+        assertion = self._require_assertion(project_id, link.assertion_id, "evidence:read")
+        evidence_source = self._require_source(link.evidence_source_id)
+        source_chunk = self._resolve_link_source_chunk(link)
+        source_artifact: ArtifactRead | None = None
+        source_run: AnalysisRunRead | None = None
+        if assertion.source_artifact_id is not None:
+            source_artifact = self.repository.store.artifacts.get(assertion.source_artifact_id)
+            if source_artifact is not None and source_artifact.project_id != project_id:
+                source_artifact = None
+        source_run_id = assertion.source_run_id or (source_artifact.run_id if source_artifact is not None else None)
+        if source_run_id is not None:
+            source_run = self.repository.store.analysis_runs.get(source_run_id)
+            if source_run is not None and source_run.project_id != project_id:
+                source_run = None
+
+        return EvidenceLinkDetailResponse(
+            evidence_link=link,
+            assertion=assertion,
+            evidence_source=evidence_source,
+            source_chunk=source_chunk,
+            source_artifact=source_artifact,
+            source_run=source_run,
+        )
+
     def create_evidence_link(self, project_id: UUID, payload: CreateEvidenceLinkRequest) -> CreateEvidenceLinkResponse:
         self._require_project(project_id, "evidence:write")
         self._require_assertion(project_id, payload.assertion_id, "evidence:write")
         evidence_source = self._require_source(payload.evidence_source_id)
         self._bind_source(project_id, evidence_source.id)
+        source_chunk = self._resolve_requested_source_chunk(project_id, payload)
+        source_chunk_id = source_chunk.id if source_chunk is not None else None
 
         existing = next(
             (
@@ -245,7 +356,7 @@ class EvidenceService(BaseService):
                 and link.assertion_id == payload.assertion_id
                 and link.evidence_source_id == payload.evidence_source_id
                 and link.relation_type == payload.relation_type
-                and link.source_chunk_id == payload.source_chunk_id
+                and link.source_chunk_id == source_chunk_id
                 and link.source_span_start == payload.source_span_start
                 and link.source_span_end == payload.source_span_end
                 and link.excerpt_hash == payload.excerpt_hash
@@ -262,7 +373,7 @@ class EvidenceService(BaseService):
             assertion_id=payload.assertion_id,
             evidence_source_id=payload.evidence_source_id,
             relation_type=payload.relation_type,
-            source_chunk_id=payload.source_chunk_id,
+            source_chunk_id=source_chunk_id,
             source_span_start=payload.source_span_start,
             source_span_end=payload.source_span_end,
             excerpt_hash=payload.excerpt_hash,
@@ -316,6 +427,25 @@ class EvidenceService(BaseService):
                 detail=f"evidence source {evidence_source_id} not found",
             )
         return source
+
+    def _require_source_in_project(self, project_id: UUID, evidence_source_id: UUID, *required_scopes: str) -> EvidenceSourceRead:
+        self._require_project(project_id, *required_scopes)
+        source = self._require_source(evidence_source_id)
+        if evidence_source_id not in self._project_source_ids(project_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"evidence source {evidence_source_id} not found",
+            )
+        return source
+
+    def _require_source_chunk(self, chunk_id: UUID) -> EvidenceChunkRead:
+        chunk = self.repository.store.evidence_chunks.get(chunk_id)
+        if chunk is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"evidence chunk {chunk_id} not found",
+            )
+        return chunk
 
     def _find_existing_source(
         self,
@@ -418,6 +548,7 @@ class EvidenceService(BaseService):
                 cached_at=cached_at,
             )
             self.repository.store.evidence_sources[evidence_source.id] = evidence_source
+            self._sync_inline_preview_chunk(project_id, evidence_source)
             self._append_source_upsert_audit(project_id, evidence_source)
             return evidence_source
 
@@ -439,9 +570,178 @@ class EvidenceService(BaseService):
         )
         if updated.model_dump(mode="json") != existing.model_dump(mode="json"):
             self.repository.store.evidence_sources[existing.id] = updated
+            self._sync_inline_preview_chunk(project_id, updated)
             self._append_source_upsert_audit(project_id, updated)
             return updated
         return existing
+
+    def _sync_inline_preview_chunk(self, project_id: UUID, evidence_source: EvidenceSourceRead) -> None:
+        preview_text = self._extract_inline_preview_text(evidence_source.metadata_json)
+        if preview_text is None:
+            return
+        self._create_source_chunk_record(
+            project_id,
+            evidence_source.id,
+            text=preview_text,
+            section_label=INLINE_CHUNK_SECTION_LABEL,
+            char_start=0,
+            emit_audit=False,
+        )
+
+    def _create_source_chunk_record(
+        self,
+        project_id: UUID,
+        evidence_source_id: UUID,
+        *,
+        text: str,
+        section_label: str | None,
+        char_start: int,
+        emit_audit: bool = True,
+    ) -> EvidenceChunkRead:
+        normalized_text = text.strip()
+        if not normalized_text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="evidence chunk text must not be empty",
+            )
+        char_end = char_start + len(normalized_text)
+        token_count = len(normalized_text.split())
+        if section_label == INLINE_CHUNK_SECTION_LABEL:
+            existing_inline = next(
+                (
+                    chunk
+                    for chunk in self.repository.store.evidence_chunks.values()
+                    if chunk.evidence_source_id == evidence_source_id and chunk.section_label == INLINE_CHUNK_SECTION_LABEL
+                ),
+                None,
+            )
+            if existing_inline is not None:
+                updated = existing_inline.model_copy(
+                    update={
+                        "text": normalized_text,
+                        "char_start": char_start,
+                        "char_end": char_end,
+                        "token_count": token_count,
+                    }
+                )
+                self.repository.store.evidence_chunks[existing_inline.id] = updated
+                return updated
+
+        existing = next(
+            (
+                chunk
+                for chunk in self.repository.store.evidence_chunks.values()
+                if chunk.evidence_source_id == evidence_source_id
+                and chunk.section_label == section_label
+                and chunk.text == normalized_text
+                and chunk.char_start == char_start
+            ),
+            None,
+        )
+        if existing is not None:
+            return existing
+
+        chunk_no = max(
+            (
+                chunk.chunk_no
+                for chunk in self.repository.store.evidence_chunks.values()
+                if chunk.evidence_source_id == evidence_source_id
+            ),
+            default=-1,
+        ) + 1
+        chunk = EvidenceChunkRead(
+            id=uuid4(),
+            evidence_source_id=evidence_source_id,
+            chunk_no=chunk_no,
+            section_label=section_label,
+            text=normalized_text,
+            char_start=char_start,
+            char_end=char_end,
+            token_count=token_count,
+            created_at=self.now(),
+        )
+        self.repository.store.evidence_chunks[chunk.id] = chunk
+        if emit_audit:
+            append_audit_event(
+                self.repository.store,
+                project_id=project_id,
+                event_type="evidence.chunk.created",
+                target_kind=LineageKind.EVIDENCE_CHUNK,
+                target_id=chunk.id,
+                payload_json={
+                    "evidence_source_id": str(evidence_source_id),
+                    "section_label": section_label,
+                    "chunk_no": chunk.chunk_no,
+                },
+            )
+        return chunk
+
+    def _resolve_requested_source_chunk(
+        self,
+        project_id: UUID,
+        payload: CreateEvidenceLinkRequest,
+    ) -> EvidenceChunkRead | None:
+        if payload.source_chunk_id is not None:
+            chunk = self._require_source_chunk(payload.source_chunk_id)
+            self._require_source_in_project(project_id, chunk.evidence_source_id, "evidence:write")
+            if chunk.evidence_source_id != payload.evidence_source_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="source_chunk_id must belong to evidence_source_id",
+                )
+            return chunk
+
+        candidate_chunks = [
+            chunk
+            for chunk in self.repository.store.evidence_chunks.values()
+            if chunk.evidence_source_id == payload.evidence_source_id
+        ]
+        if len(candidate_chunks) == 1:
+            return candidate_chunks[0]
+        return None
+
+    def _resolve_link_source_chunk(self, link: EvidenceLinkRead) -> EvidenceChunkRead | None:
+        if link.source_chunk_id is None:
+            return None
+        chunk = self.repository.store.evidence_chunks.get(link.source_chunk_id)
+        if chunk is None or chunk.evidence_source_id != link.evidence_source_id:
+            return None
+        return chunk
+
+    @staticmethod
+    def _coerce_inline_text(value: Any, *, depth: int = 0) -> str | None:
+        if isinstance(value, str):
+            normalized = value.replace("\r\n", "\n").strip()
+            return normalized or None
+
+        if isinstance(value, list):
+            items = [
+                item
+                for item in (
+                    EvidenceService._coerce_inline_text(candidate, depth=depth + 1)
+                    for candidate in value
+                )
+                if item
+            ]
+            if not items:
+                return None
+            return "\n\n".join(items)
+
+        if isinstance(value, dict) and depth < 2:
+            for key in OBJECT_TEXT_KEYS:
+                candidate = EvidenceService._coerce_inline_text(value.get(key), depth=depth + 1)
+                if candidate:
+                    return candidate
+
+        return None
+
+    @staticmethod
+    def _extract_inline_preview_text(metadata_json: dict[str, Any]) -> str | None:
+        for key in INLINE_PREVIEW_KEYS:
+            candidate = EvidenceService._coerce_inline_text(metadata_json.get(key))
+            if candidate:
+                return candidate
+        return None
 
     def _append_source_upsert_audit(self, project_id: UUID, evidence_source: EvidenceSourceRead) -> None:
         append_audit_event(

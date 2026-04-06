@@ -53,7 +53,29 @@
 | `review.completed` | `contracts/events/review-completed.schema.json` | Review Service | `review_id` |
 | `export.completed` | `contracts/events/export-completed.schema.json` | Export Service | `export_job_id` |
 
-## 3. MVP 必接事件
+补充约束：
+
+- `review.requested` / `review.completed` 在 `target_kind=manuscript` 时会携带 `payload.target_version_no`，供 workspace / inspector 只投影当前 manuscript version 的审核状态
+- `artifact.created` 在 artifact 声明稳定输出位点时会携带 `payload.output_slot`，供 run visualization / inspector 对位 rerun 产物
+
+## 3. Timeline 与 Projection 规则
+
+领域事件集保持小而稳定；更丰富的产品可视化通过投影完成，而不是无限增加事件种类。
+
+- `project timeline`
+  - 由 schema-backed domain events、`workflow detail` 和 `audit_event` 联合构成
+  - schema 事件负责跨服务稳定同步；审计事件负责补充本地细粒度动作
+- `run visualization`
+  - 核心仍依赖 `workflow.started`、`analysis.run.requested`、`analysis.run.succeeded|failed`、`artifact.created`
+  - 更细阶段、checkpoint 和 blocking summary 应从 `workflow_tasks` 与 `analysis_runs.runtime_manifest_json` 读取
+- `rollback / resume`
+  - 不新增“undo”事件
+  - 通过 `workflow.started`、`artifact.created` 与审计中的版本/分支信息重建恢复链
+- `discussion mode`
+  - 可复用 `workflow.started` 和 `review.requested`
+  - `analysis.plan.created`、`manuscript.version.created` 等细粒度动作当前可继续作为通用审计事件流转，暂不提升为跨服务领域事件
+
+## 4. MVP 必接事件
 
 如果只做 MVP 主链路，建议 producer / consumer 先接这 8 条：
 

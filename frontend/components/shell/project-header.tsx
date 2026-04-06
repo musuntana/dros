@@ -4,8 +4,23 @@ import { formatDateTime } from "@/lib/format/date";
 import { StatusBadge } from "@/components/status/status-badge";
 
 export function ProjectHeader({ detail }: { detail: ProjectDetailResponse }) {
-  const { project, active_manuscript, latest_snapshot } = detail;
+  const { project, active_manuscript, latest_snapshot, review_summary_scope } = detail;
   const reviewSummary = detail.review_summary ?? {};
+  const reviewScopeLabel =
+    review_summary_scope?.label && review_summary_scope.target_version_no
+      ? `${review_summary_scope.label} v${review_summary_scope.target_version_no}`
+      : review_summary_scope?.label ?? active_manuscript?.title ?? null;
+  const reviewSummaryLabel =
+    Object.keys(reviewSummary).length > 0
+      ? Object.entries(reviewSummary)
+          .map(([key, value]) => `${key}:${value}`)
+          .join(" · ")
+      : review_summary_scope
+        ? "No current-version reviews"
+        : "No active manuscript";
+  const reviewSummaryNote = reviewScopeLabel
+    ? `Scoped to ${reviewScopeLabel}.`
+    : "Select an active manuscript to track review state on the current chain.";
 
   return (
     <header className="rounded-card border border-subtle bg-surface p-6 shadow-soft">
@@ -45,14 +60,12 @@ export function ProjectHeader({ detail }: { detail: ProjectDetailResponse }) {
         </div>
         <div className="rounded-2xl border border-subtle bg-app px-4 py-3">
           <dt className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Review Summary</dt>
-          <dd className="mt-2 text-sm font-medium text-strong">
-            {Object.keys(reviewSummary).length > 0
-              ? Object.entries(reviewSummary)
-                  .map(([key, value]) => `${key}:${value}`)
-                  .join(" · ")
-              : "No review tickets"}
+          <dd className="mt-2 text-sm font-medium text-strong" data-testid="project-header-review-summary">
+            {reviewSummaryLabel}
           </dd>
-          <p className="mt-1 text-xs text-muted">Approval state stays visible before verify and export.</p>
+          <p className="mt-1 text-xs text-muted" data-testid="project-header-review-scope">
+            {reviewSummaryNote}
+          </p>
         </div>
       </dl>
     </header>

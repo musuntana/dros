@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 const semanticClassName: Record<string, string> = {
   approved: "border-success/25 bg-success/10 text-success",
   blocked: "border-danger/25 bg-danger/10 text-danger",
+  canceled: "border-subtle bg-app text-muted",
+  changes_requested: "border-warning/25 bg-warning/10 text-warning",
   completed: "border-success/25 bg-success/10 text-success",
   created: "border-info/25 bg-info/10 text-info",
   exported: "border-success/25 bg-success/10 text-success",
@@ -11,7 +13,9 @@ const semanticClassName: Record<string, string> = {
   pending: "border-warning/25 bg-warning/10 text-warning",
   queued: "border-info/25 bg-info/10 text-info",
   ready: "border-success/25 bg-success/10 text-success",
+  rejected: "border-danger/25 bg-danger/10 text-danger",
   running: "border-info/25 bg-info/10 text-info",
+  stale: "border-warning/25 bg-warning/10 text-warning",
   verified: "border-success/25 bg-success/10 text-success",
   warning: "border-warning/25 bg-warning/10 text-warning",
 };

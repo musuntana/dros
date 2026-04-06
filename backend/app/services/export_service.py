@@ -208,6 +208,7 @@ class ExportService(BaseService):
             project_id=project_id,
             run_id=None,
             artifact_type=artifact_type_map[export_format],
+            output_slot=None,
             storage_uri=storage_uri,
             mime_type=mime_type_map[export_format],
             sha256=sha256(rendered_bytes).hexdigest(),

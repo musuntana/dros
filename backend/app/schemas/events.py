@@ -145,6 +145,7 @@ class ArtifactCreatedPayload(DRBaseModel):
         "zip",
         "evidence_attachment",
     ]
+    output_slot: str | None = None
     storage_uri: str = Field(min_length=1)
     sha256: str = Field(min_length=64, max_length=64)
 
@@ -197,6 +198,7 @@ class ReviewRequestedPayload(DRBaseModel):
     review_type: Literal["evidence", "analysis", "manuscript", "export"]
     target_kind: str = Field(min_length=1)
     target_id: UUID
+    target_version_no: int | None = Field(default=None, ge=1)
     state: Literal["pending", "approved", "rejected", "changes_requested"]
 
 
@@ -210,6 +212,7 @@ class ReviewCompletedPayload(DRBaseModel):
     review_type: Literal["evidence", "analysis", "manuscript", "export"]
     target_kind: str = Field(min_length=1)
     target_id: UUID
+    target_version_no: int | None = Field(default=None, ge=1)
     state: Literal["pending", "approved", "rejected", "changes_requested"]
     reviewer_id: UUID | None = None
     decided_at: datetime | None = None

@@ -15,6 +15,9 @@
 7. 会触发异步流程的接口必须返回 `workflow_instance_id`、`task_id` 或 `job_id`。
 8. API 不暴露任意脚本执行能力。
 9. 文稿、证据、分析结果之间的主绑定对象是 `assertion`，不是 `analysis_run`。
+10. `project timeline`、`run visualization`、`artifact inspector` 必须可由现有 REST + SSE 资源重建，不单独引入“对话真相接口”。
+11. `rollback / resume` 的 API 语义必须创建新版本或 child workflow，不允许原地把历史对象改写回旧状态。
+12. `discussion mode` 只输出结构化计划结果，不输出可直接导出的自由文本结论。
 
 ## 2. 资源分组
 
@@ -31,6 +34,7 @@
 - `uploads/sign` 只发放签名上传地址
 - `uploads/complete` 只登记上传完成，不自动创建 analysis run
 - 项目级实时事件当前本地开发实现通过 SSE 下发；浏览器侧前端经由同源 `/api/projects/{project_id}/events` proxy 消费，而不是在页面直接拼 backend URL
+- `/events` 的产品语义是 `project_timeline`，重点是阶段、阻断项、对象引用和产物变化，不是 agent token stream
 - 当前本地开发实现中，签名上传地址和 artifact download URL 允许解析到本地 object-store file URL；页面仍只能经由 `GatewayClient` adapter 使用这些能力
 - 浏览器侧 artifact 下载当前经由同源 `/api/projects/{project_id}/artifacts/{artifact_id}/download` route 落地；该 route 会先在服务端调用 gateway `download-url`，遇到本地 `file://` 时直接回传附件，否则执行外部跳转
 - 当前 auth 支持 `Authorization: Bearer <jwt>`；bearer token 会校验签名、issuer、audience，并把 `principal / tenant / role / scopes` claims 映射为请求上下文
@@ -44,8 +48,9 @@
 - 若启用 `DROS_AUTH_REQUIRE_JTI=true`，token 必须携带 `DROS_AUTH_JTI_CLAIM` 指定的 `jti` claim；`DROS_AUTH_REVOKED_JTI_LIST` 中列出的 token 会被直接拒绝
 - project-scoped REST 当前会先校验 tenant / membership，再校验 required scopes；即使 token 自报更高 scope，只要 membership scope 不允许，也会被 `403`
 - `GET /projects/{project_id}/events` 当前会在开始 SSE stream 之前先完成 project scope + `events:read` 校验；若 project 不存在或无权访问，会直接返回 HTTP 错误，而不是先写入部分 stream
-- `GET /projects/{project_id}/events` 当前会优先输出 schema-backed domain event envelope；`project / dataset_snapshot / workflow / analysis_run / artifact / review / export` 已对齐 `backend/app/schemas/events.py`
+- `GET /projects/{project_id}/events` 当前会优先输出 schema-backed domain event envelope；`project / dataset_snapshot / workflow / analysis_run / artifact / assertion / evidence / review / export` 已对齐 `backend/app/schemas/events.py`
 - 对尚未建立独立 domain schema 的审计事件，`/events` 当前仍回退到通用 SSE envelope，避免前端监听链路被非核心事件阻断
+- `dataset.snapshot.blocked` 当前已接入 schema-backed SSE；同一 snapshot + reason 的阻断结果会去重，避免 dataset detail SSR 反复触发 `policy-checks` 时持续写重复事件
 
 ### 2.2 Projects
 
@@ -61,6 +66,11 @@
 - `ProjectRead`
 - `ProjectMemberRead`
 
+语义：
+
+- `ProjectDetailResponse.review_summary` 当前对齐 workspace review gate，只统计 `active_manuscript` 的 current version；没有 active manuscript 时返回空摘要
+- `ProjectDetailResponse.review_summary_scope` 会显式返回该摘要绑定的 `target_kind / target_id / target_version_no / label`，避免前端只靠文案推断 review scope
+
 ### 2.3 Datasets
 
 - `POST /v1/projects/{project_id}/datasets/import-public`
@@ -75,6 +85,13 @@
 
 - `DatasetRead`
 - `DatasetSnapshotRead`
+
+关键语义：
+
+- `register-upload` 创建的 current snapshot 默认进入 `phi_scan_status=pending`、`deid_status=pending`
+- `POST /datasets/{dataset_id}/policy-checks` 当前会把 `pending / blocked / failed` 显式折叠成 `blocking_reasons`，不再出现 `allowed=false` 但无阻断原因的结果
+- upload snapshot 处于 `phi_scan_pending / phi_scan_blocked / deidentification_pending / deidentification_failed` 任一状态时，`allowed=false`
+- 当 policy gate 进入阻断态时，当前会额外落 `dataset.snapshot.blocked` 领域事件；若同一 snapshot 的阻断原因未变化，则不会重复落账
 
 ### 2.4 Templates / Workflows / Analysis
 
@@ -100,11 +117,18 @@
 关键语义：
 
 - `POST /analysis/plans` 只生成模板建议和参数 JSON，不执行分析
+- `POST /analysis/plans` 可以作为 discussion mode 的收束点，但对外只返回结构化计划、前置检查和 rationale
 - `POST /workflows` 启动状态机
+- `POST /workflows` 的 `parent_workflow_id` 用于 resume / fork 自历史 workflow 继续，不用于把父 workflow 状态“改回去”
+- `POST /workflows` 当前会校验 `parent_workflow_id` 指向同 project 的真实 workflow；如果存在 parent，child `workflow_type` 必须与父 workflow 一致
+- child workflow 当前会额外写入 `resume_from_parent` task；non-terminal parent 会把 child 初始化到父 workflow 的 `state / current_step`，terminal parent 则从新的 `created` branch 重启
 - `POST /analysis-runs` 负责进入白名单模板执行路径
 - `POST /analysis-runs` 当前开发态会经由内置 broker / runner / artifact emitter 立即执行，返回的 `analysis_run.state` 可能已经是 `succeeded` 或 `failed`
+- `POST /analysis-runs` 当前接受 `rerun_of_run_id`；若提供，会要求指向同 project、同 `snapshot_id`、同 `template_id` 的真实历史 run，并把该引用持久化到 `analysis_run.rerun_of_run_id`
+- rerun 路径当前只会对带显式 `output_slot` 的 output artifacts 自动补 `artifact supersedes` 链；缺少稳定槽位的 legacy artifact 不会被自动配对
 - `GET /analysis-runs` 返回 project-scoped analysis run 历史，不要求前端再从 `lineage` 侧聚合
 - `GET /analysis-runs/{run_id}` 当前会附带 runner 自动产出的 output artifacts
+- `GET /workflows/{workflow_instance_id}` + `GET /analysis-runs/{run_id}` 应共同回答当前 run 正在做什么、卡在哪、已经产生什么 artifact
 
 ### 2.5 Artifacts / Assertions / Lineage
 
@@ -128,7 +152,12 @@
 - artifact 只登记元数据，不上传二进制文件
 - assertion 只追加写，不提供原地覆盖
 - assertion 创建后默认进入 `draft`，需要通过 `/verify` 才能进入 `verified`
+- `output_slot` 当前已是 artifact 正式字段；若 artifact 带 `run_id + output_slot`，则同一 `run_id + artifact_type + output_slot` 当前不允许重复创建
+- 为兼容旧客户端，`CreateArtifactRequest` 仍可从 `metadata_json.output_slot` 回填顶层 `output_slot`，但两者若同时存在且不一致会返回 `422`
 - lineage edge 主要用于显式登记或回填，不替代核心对象关系；artifact `supersedes` 会同步写入 `artifact.superseded_by`
+- `artifact supersedes` 当前要求两端具有相同 `artifact_type + output_slot`
+- 若 supersede 两端都绑定 `run_id`，replacement artifact 所属 run 当前必须声明 `rerun_of_run_id=from_artifact.run_id`
+- `GET /artifacts/{artifact_id}`、`GET /assertions/{assertion_id}`、`GET /lineage` 组合起来要支持 `artifact inspector` 的双向跳转
 
 ### 2.6 Evidence
 
@@ -136,22 +165,31 @@
 - `POST /v1/projects/{project_id}/evidence/resolve`
 - `POST /v1/projects/{project_id}/evidence`
 - `GET /v1/projects/{project_id}/evidence`
+- `POST /v1/projects/{project_id}/evidence/{evidence_source_id}/chunks`
+- `GET /v1/projects/{project_id}/evidence/{evidence_source_id}/chunks`
+- `GET /v1/projects/{project_id}/evidence/chunks/{chunk_id}`
 - `POST /v1/projects/{project_id}/evidence-links`
 - `GET /v1/projects/{project_id}/evidence-links`
+- `GET /v1/projects/{project_id}/evidence-links/{link_id}`
 - `POST /v1/projects/{project_id}/evidence-links/{link_id}/verify`
 
 主对象：
 
 - `EvidenceSourceRead`
+- `EvidenceChunkRead`
 - `EvidenceLinkRead`
+- `EvidenceLinkDetailResponse`
 
 关键语义：
 
 - `search` 只返回候选，不直接落正式正文
 - `resolve` 负责 `PMID / PMCID / DOI` 标准化
+- `evidence chunk` 当前已经有 create / list / detail REST 边界；source upsert 若包含 inline preview 文本，会自动 materialize 一个 `inline_preview` chunk
+- `chunk-native preview` 当前优先于 `metadata_json` fallback；`metadata_json` 仅在 link 尚未解析出 persisted chunk 时兜底
 - `evidence-links/{link_id}/verify` 会真实回写 `verifier_status`，不是默认固定 `passed`
 - `evidence-links` 才是 assertion 与证据绑定的正式入口
 - `GET /evidence-links` 返回 project-scoped 绑定历史，不要求前端再从 `assertion detail` 侧聚合
+- `GET /evidence-links/{link_id}` 当前会返回 `evidence_link + assertion + evidence_source + source_chunk + source_artifact/source_run`，供 workspace inspector 与 detail route 直接消费
 
 ### 2.7 Manuscripts
 
@@ -171,6 +209,10 @@
 关键语义：
 
 - block 通过 `block_assertion_links` 引用 assertion
+- `GET /manuscripts/{manuscript_id}/blocks` 支持可选 `version_no`；缺失时返回 current version，显式传入时返回对应历史版本
+- `POST /manuscripts/{manuscript_id}/versions` 的 `base_version_no` 语义是从历史版本派生新的 current version，用于 rollback / resume
+- `POST /manuscripts/{manuscript_id}/versions` 当前会复制 base version 的 `manuscript_blocks` 与 `block_assertion_links`；新版本 block 会把被派生的历史 block 写入 `supersedes_block_id`
+- 若 `base_version_no` 或显式查询的 `version_no` 缺失，当前默认以 `current_version_no` 作为派生 / 读取基线；若请求 future version，则返回 `422`
 - `render` 只能消费 `assertion.state=verified`
 
 ### 2.8 Review / Verification / Export
@@ -197,6 +239,11 @@
 - `GET /workflows/{workflow_instance_id}` 可以回读 verification workflow 的 `gate_evaluations`
 - `gate_evaluations` 当前由独立 `EvidenceControlPlane` 组件产出，并会逐条写入审计
 - `review` 记录人工审批结论
+- `target_kind=manuscript` 的 `review` 当前会显式记录 `target_version_no`；缺失时默认绑定到 manuscript 的 current version
+- 非 manuscript review 不接受 `target_version_no`
+- discussion mode 的人工确认可以复用 `review`，不引入单独的“聊天审批对象”
+- `assertion.create` 当前会额外落 `assertion.created`，供 gateway realtime 把稿件 grounding 起点序列化成 schema-backed 领域事件
+- `evidence-links/{link_id}/verify` 当前会按真实核验结果额外落 `evidence.linked` 或 `evidence.blocked`，不再只保留本地审计别名
 - `review.create / review.decision` 当前会额外落 `review.requested / review.completed`，供 gateway realtime 直接转发
 - 当前 export gate 以 `verify` 结果为硬前置，不要求已有 `review` 对象
 - `export` 只消费已通过验证的 current manuscript version

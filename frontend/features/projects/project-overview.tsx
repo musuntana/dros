@@ -7,10 +7,16 @@ import { BlockingSummary } from "@/components/status/blocking-summary";
 import { StatusBadge } from "@/components/status/status-badge";
 import { formatDateTime } from "@/lib/format/date";
 
-function reviewSummaryLines(summary: Record<string, number>): string[] {
+function reviewSummaryLines(
+  summary: Record<string, number>,
+  scopeLabel: string | null | undefined,
+): string[] {
   const entries = Object.entries(summary);
   if (entries.length === 0) {
-    return ["No review state is recorded yet."];
+    if (!scopeLabel) {
+      return ["No active manuscript review scope is selected."];
+    }
+    return [`No review state is recorded for ${scopeLabel}.`];
   }
 
   return entries.map(([state, count]) => `${state}: ${count}`);
@@ -25,6 +31,14 @@ export function ProjectOverview({
 }) {
   const activeWorkflows = detail.active_workflows ?? [];
   const reviewSummary = detail.review_summary ?? {};
+  const reviewScopeLabel =
+    detail.review_summary_scope?.label && detail.review_summary_scope.target_version_no
+      ? `${detail.review_summary_scope.label} v${detail.review_summary_scope.target_version_no}`
+      : detail.review_summary_scope?.label;
+  const reviewSummaryDetail = reviewSummaryLines(
+    reviewSummary,
+    reviewScopeLabel,
+  ).join(" · ");
 
   return (
     <div className="space-y-6">
@@ -91,8 +105,12 @@ export function ProjectOverview({
             />
             <InfoRow
               label="Review summary"
-              value={<span className="text-sm text-strong">{reviewSummaryLines(reviewSummary).join(" · ")}</span>}
-              note="Review and verify stay explicit before export."
+              value={
+                <span className="text-sm text-strong" data-testid="project-overview-review-summary">
+                  {reviewSummaryDetail}
+                </span>
+              }
+              note="Review and verify stay explicit on the active manuscript chain before export."
             />
           </div>
         </div>

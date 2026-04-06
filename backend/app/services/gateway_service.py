@@ -27,7 +27,11 @@ from ..schemas.events import (
     AnalysisRunRequestedEvent,
     AnalysisRunSucceededEvent,
     ArtifactCreatedEvent,
+    AssertionCreatedEvent,
+    DatasetSnapshotBlockedEvent,
     DatasetSnapshotCreatedEvent,
+    EvidenceBlockedEvent,
+    EvidenceLinkedEvent,
     ExportCompletedEvent,
     ProjectCreatedEvent,
     ReviewCompletedEvent,
@@ -168,18 +172,22 @@ class GatewayService(BaseService):
             "project_id": str(event.project_id) if event.project_id is not None else "",
             "idempotency_key": event.event_hash,
             "occurred_at": event.created_at.isoformat(),
-            "payload": event.payload_json,
+            "payload": self._enrich_fallback_payload(event),
         }
 
     def _serialize_structured_event(self, event: AuditEventRead) -> dict[str, object] | None:
         builders = {
             "project.created": self._build_project_created_event,
             "dataset.snapshot.created": self._build_dataset_snapshot_created_event,
+            "dataset.snapshot.blocked": self._build_dataset_snapshot_blocked_event,
             "workflow.started": self._build_workflow_started_event,
             "analysis.run.requested": self._build_analysis_run_requested_event,
             "analysis.run.succeeded": self._build_analysis_run_succeeded_event,
             "analysis.run.failed": self._build_analysis_run_failed_event,
             "artifact.created": self._build_artifact_created_event,
+            "assertion.created": self._build_assertion_created_event,
+            "evidence.linked": self._build_evidence_linked_event,
+            "evidence.blocked": self._build_evidence_blocked_event,
             "review.requested": self._build_review_requested_event,
             "review.completed": self._build_review_completed_event,
             "export.completed": self._build_export_completed_event,
@@ -220,6 +228,31 @@ class GatewayService(BaseService):
                 "input_hash_sha256": snapshot.input_hash_sha256,
                 "deid_status": snapshot.deid_status.value,
                 "phi_scan_status": snapshot.phi_scan_status.value,
+            },
+        ).model_dump(mode="json")
+
+    def _build_dataset_snapshot_blocked_event(self, event: AuditEventRead) -> dict[str, object]:
+        payload = dict(event.payload_json or {})
+        snapshot = self.repository.store.dataset_snapshots.get(event.target_id)
+        dataset_id = payload.get("dataset_id", snapshot.dataset_id if snapshot is not None else None)
+        snapshot_id = payload.get("snapshot_id", snapshot.id if snapshot is not None else None)
+        blocked_checks = payload.get("blocked_checks", [])
+        reason = payload.get("reason")
+        if not isinstance(blocked_checks, list):
+            blocked_checks = [str(blocked_checks)]
+        if dataset_id is None or snapshot_id is None or not blocked_checks or reason is None:
+            return self._fallback_structured_event(event)
+        return DatasetSnapshotBlockedEvent(
+            **self._event_envelope(
+                event,
+                produced_by="review_service",
+                idempotency_key=f"{snapshot_id}:{reason}",
+            ),
+            payload={
+                "dataset_id": dataset_id,
+                "snapshot_id": snapshot_id,
+                "blocked_checks": [str(item) for item in blocked_checks],
+                "reason": reason,
             },
         ).model_dump(mode="json")
 
@@ -300,8 +333,87 @@ class GatewayService(BaseService):
                 "artifact_id": artifact.id,
                 "run_id": artifact.run_id,
                 "artifact_type": artifact.artifact_type.value,
+                "output_slot": artifact.output_slot,
                 "storage_uri": artifact.storage_uri,
                 "sha256": artifact.sha256,
+            },
+        ).model_dump(mode="json")
+
+    def _build_assertion_created_event(self, event: AuditEventRead) -> dict[str, object]:
+        assertion = self.repository.store.assertions.get(event.target_id)
+        if assertion is None:
+            return self._fallback_structured_event(event)
+        payload = event.payload_json or {}
+        return AssertionCreatedEvent(
+            **self._event_envelope(event, produced_by="manuscript_service", idempotency_key=str(assertion.id)),
+            payload={
+                "assertion_id": payload.get("assertion_id", assertion.id),
+                "assertion_type": payload.get("assertion_type", assertion.assertion_type.value),
+                "state": payload.get("state", "draft"),
+                "source_run_id": payload.get("source_run_id", assertion.source_run_id),
+                "source_artifact_id": payload.get("source_artifact_id", assertion.source_artifact_id),
+            },
+        ).model_dump(mode="json")
+
+    def _build_evidence_linked_event(self, event: AuditEventRead) -> dict[str, object]:
+        payload = dict(event.payload_json or {})
+        link = self._lookup_evidence_link(payload.get("evidence_link_id"))
+        assertion_id = payload.get("assertion_id", link.assertion_id if link is not None else None)
+        evidence_source_id = payload.get("evidence_source_id", link.evidence_source_id if link is not None else None)
+        relation_type = payload.get("relation_type", link.relation_type.value if link is not None else None)
+        verifier_status = payload.get("verifier_status", link.verifier_status.value if link is not None else None)
+        evidence_link_id = payload.get("evidence_link_id", link.id if link is not None else None)
+        if (
+            assertion_id is None
+            or evidence_link_id is None
+            or evidence_source_id is None
+            or relation_type is None
+            or verifier_status is None
+        ):
+            return self._fallback_structured_event(event)
+        return EvidenceLinkedEvent(
+            **self._event_envelope(
+                event,
+                produced_by="evidence_service",
+                idempotency_key=f"{assertion_id}:{evidence_source_id}",
+            ),
+            payload={
+                "assertion_id": assertion_id,
+                "evidence_link_id": evidence_link_id,
+                "evidence_source_id": evidence_source_id,
+                "relation_type": relation_type,
+                "verifier_status": verifier_status,
+            },
+        ).model_dump(mode="json")
+
+    def _build_evidence_blocked_event(self, event: AuditEventRead) -> dict[str, object]:
+        payload = dict(event.payload_json or {})
+        link = self._lookup_evidence_link(payload.get("evidence_link_id"))
+        assertion_id = payload.get("assertion_id", link.assertion_id if link is not None else event.target_id)
+        needs_human_items = payload.get("needs_human_items", [])
+        if not isinstance(needs_human_items, list):
+            needs_human_items = [str(needs_human_items)]
+        reason = payload.get("reason")
+        if reason is None and needs_human_items:
+            reason = "; ".join(str(item) for item in needs_human_items)
+        if assertion_id is None or reason is None:
+            return self._fallback_structured_event(event)
+        candidate_identifier = payload.get("candidate_identifier")
+        if candidate_identifier is None and link is not None:
+            evidence_source = self.repository.store.evidence_sources.get(link.evidence_source_id)
+            if evidence_source is not None:
+                candidate_identifier = evidence_source.external_id_norm
+        return EvidenceBlockedEvent(
+            **self._event_envelope(
+                event,
+                produced_by="evidence_service",
+                idempotency_key=f"{assertion_id}:{reason}",
+            ),
+            payload={
+                "assertion_id": assertion_id,
+                "candidate_identifier": candidate_identifier,
+                "reason": reason,
+                "needs_human_items": [str(item) for item in needs_human_items],
             },
         ).model_dump(mode="json")
 
@@ -316,6 +428,7 @@ class GatewayService(BaseService):
                 "review_type": review.review_type.value,
                 "target_kind": review.target_kind.value,
                 "target_id": review.target_id,
+                "target_version_no": review.target_version_no,
                 "state": review.state.value,
             },
         ).model_dump(mode="json")
@@ -331,6 +444,7 @@ class GatewayService(BaseService):
                 "review_type": review.review_type.value,
                 "target_kind": review.target_kind.value,
                 "target_id": review.target_id,
+                "target_version_no": review.target_version_no,
                 "state": review.state.value,
                 "reviewer_id": review.reviewer_id,
                 "decided_at": review.decided_at,
@@ -365,6 +479,14 @@ class GatewayService(BaseService):
             "occurred_at": event.created_at,
         }
 
+    def _lookup_evidence_link(self, link_id: object) -> object | None:
+        if link_id is None:
+            return None
+        try:
+            return self.repository.store.evidence_links.get(UUID(str(link_id)))
+        except (TypeError, ValueError):
+            return None
+
     def _fallback_structured_event(self, event: AuditEventRead) -> dict[str, object]:
         return {
             "event_id": str(event.id),
@@ -377,5 +499,13 @@ class GatewayService(BaseService):
             "project_id": str(event.project_id) if event.project_id is not None else "",
             "idempotency_key": event.event_hash,
             "occurred_at": event.created_at.isoformat(),
-            "payload": event.payload_json,
+            "payload": self._enrich_fallback_payload(event),
         }
+
+    def _enrich_fallback_payload(self, event: AuditEventRead) -> dict[str, object]:
+        """Merge audit event target reference into payload for unstructured events."""
+        payload: dict[str, object] = dict(event.payload_json) if event.payload_json else {}
+        if event.target_id is not None:
+            payload.setdefault("target_id", str(event.target_id))
+            payload.setdefault("target_kind", event.target_kind.value if event.target_kind else None)
+        return payload

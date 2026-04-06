@@ -1,6 +1,6 @@
 # DR-OS Implementation Status
 
-更新时间：2026-04-05
+更新时间：2026-04-06
 
 ## 1. 当前结论
 
@@ -8,7 +8,7 @@
 
 截至本次整理，可信结论是：
 
-- 后端当前已实现 `61` 条 `/v1` 路由，外加 `GET /healthz`，合计 `62` 条非文档路由。
+- 后端当前已实现 `65` 条 `/v1` 路由，外加 `GET /healthz`，合计 `66` 条非文档路由。
 - FastAPI Control Plane 已覆盖 `templates / gateway / projects / datasets / workflows / analysis-runs / artifacts / assertions / evidence / evidence-links / manuscripts / reviews / exports / audit replay`。
 - 前端当前已具备 `Next.js App Router` 工作区，覆盖 `projects` 列表与 project-scoped 的 `datasets / workflows / analysis-runs / artifacts / assertions / evidence / manuscripts / reviews / exports / audit` 页面。
 - 前端服务端数据层与 server action 当前统一走 `createServerControlPlaneClient` / `createServerGatewayClient`，不再直接在 server 侧裸用默认 client。
@@ -16,7 +16,7 @@
 - `postgres` backend 当前是开发态 snapshot persistence adapter，用于本地 Compose 主栈，不是最终 row-level PostgreSQL repository。
 - 仓库已经提供 `docker compose --profile postgres up --build -d` 的主栈启动方式，并已验证前后端 + PostgreSQL 联调链路。
 - 文档入口当前已收口到 `README.md`、`docs/implementation-status.md` 和 `docs/local-deployment.md`；不再继续维护独立的 frontend / backend delivery plan。
-- 后端、前端、契约检查、架构检查、词表检查都已在 2026-04-05 重新执行并通过。
+- 后端 guardrail 与前端契约检查已在 2026-04-06 重新执行并通过；前端 `lint / typecheck / build / e2e` 与 Compose smoke 最新确认记录见 2026-04-05 条目。
 
 一句话概括当前状态：
 
@@ -39,6 +39,7 @@
 
 - `analysis-runs` 已有 project-scoped `create / list / detail`
 - `evidence-links` 已有 project-scoped `create / list / verify`
+- `evidence chunks` 已有 project-scoped `create / list / detail`
 - `exports` 已有 project-scoped `create / list / detail`
 - Gateway 本地开发实现已在同一 FastAPI 进程中提供：
   - `GET /v1/session`
@@ -55,6 +56,13 @@
 - bearer token 当前可通过 `DROS_AUTH_JWT_SECRET / DROS_AUTH_JWKS_URL / DROS_AUTH_OIDC_DISCOVERY_URL / DROS_AUTH_INTROSPECTION_URL` 四类入口完成校验
 - 启用 introspection 时，Control Plane 当前会要求 `active=true`；既支持 `JWT + introspection` 联合校验，也支持 introspection-only opaque bearer
 - project-scoped 授权当前已不是只看 `tenant / membership` 可见性；effective scopes 已按 `principal scope_tokens ∩ project membership scope_tokens` 真正强制执行
+- `POST /workflows` 当前已把 `parent_workflow_id` 落成真实 child workflow branch：会校验父 workflow，同步落 `resume_from_parent` task 与 branch 审计，并在 non-terminal parent 上继承 `state / current_step`
+- `POST /analysis-runs` 当前已把 `rerun_of_run_id` 落成真实分析重跑链：rerun 仅允许指向同 `snapshot_id + template_id` 的历史 run，新 run 会持久化前序 run 引用，并在 inline artifact emitter 中仅对带显式 `output_slot` 的 output artifact 自动写 `supersedes`
+- `Artifact Service` 当前已把 `output_slot` 提升为 artifact 正式字段，并保留对 legacy `metadata_json.output_slot` 的兼容回填：同一 `run_id + artifact_type + output_slot` 不能重复；手工 artifact `supersedes` 也必须满足同 `artifact_type + output_slot`，且 run-backed replacement 必须来自声明了 `rerun_of_run_id` 的新 run
+- `POST /manuscripts/{manuscript_id}/versions` 当前已把 `base_version_no` 落成真实版本派生：会从历史版本复制 block 与 `block_assertion_links`，并为新 block 写入 `supersedes_block_id`
+- `GET /manuscripts/{manuscript_id}/blocks?version_no=` 当前已能显式读取历史 block 版本；若请求 future `version_no`，返回 `422`
+- Gateway `/events` 当前已把 `assertion.created / evidence.linked / evidence.blocked` 接进 schema-backed SSE；evidence link verify 不再只落本地 `evidence.link.verified` 审计别名
+- `POST /datasets/{dataset_id}/policy-checks` 当前已把 upload snapshot 的 `pending` 状态收口成显式 `blocking_reasons`，并会在阻断时幂等落 `dataset.snapshot.blocked`，供 dataset gate 与 workspace timeline 直接消费
 - NCBI adapter 与 cache 逻辑已在代码中存在，但是否启用仍取决于运行时环境变量
 
 ### 2.2 Frontend / Research Canvas
@@ -73,10 +81,12 @@
 - `/projects/[projectId]/assertions`
 - `/projects/[projectId]/assertions/[assertionId]`
 - `/projects/[projectId]/evidence`
+- `/projects/[projectId]/evidence-links/[linkId]`
 - `/projects/[projectId]/manuscripts`
 - `/projects/[projectId]/manuscripts/[manuscriptId]`
 - `/projects/[projectId]/reviews`
 - `/projects/[projectId]/exports`
+- `/projects/[projectId]/exports/[exportJobId]`
 - `/projects/[projectId]/audit`
 
 同时还存在两个前端 API route：
@@ -92,7 +102,10 @@
 - `frontend/lib/api/control-plane/client.ts`：统一 REST client
 - `frontend/lib/api/gateway/`：Gateway adapter 层
 - `frontend/lib/api/auth-headers.server.ts`：服务端 header 转发
-- `frontend/components/shell/workspace-sidebar.tsx`：左栏共享客户端状态容器，统一承接对象链、Inspector 与 realtime 事件选中态
+- `frontend/components/shell/workspace-chrome.tsx`：工作区共享客户端状态容器，统一承接对象链、阶段式 timeline、Inspector 与 realtime 事件选中态
+- `frontend/components/shell/project-stage-timeline.tsx`：`project_timeline` 的阶段式主投影组件
+- `frontend/features/artifacts/artifact-lineage-graph.tsx`：artifact detail 主画布中的 live lineage adjacency 图
+- `frontend/features/exports/export-job-detail.tsx`：export detail route 的 live delivery-chain 页面
 
 当前前端的一个重要实现事实是：
 
@@ -102,10 +115,19 @@
 - `GatewayClient` 在未显式设置网关 base URL 时，会自动回落到 Control Plane base URL
 - 浏览器侧 realtime 当前经由 Next 同源 `/api/projects/[projectId]/events` route proxy 到 backend SSE；如果上游在开始流之前返回 `403 / 404`，同源 route 会先原样透传错误，再决定是否开始流式响应
 - artifact 下载当前经由 Next 同源 `/api/projects/[projectId]/artifacts/[artifactId]/download` route 调用 gateway `download-url`；若返回本地 `file://` 则由 Node route 直接回传附件，否则再做 `302` 跳转
-- project workspace 左栏当前已不是“被动事件流 + 静态 Inspector”两块分离面板，而是共享选中态
-- `ProjectEventsFeed` 当前可选中具体 `project event`
-- `InspectorPanel` 当前会显示选中事件的 `trace / request / payload` 与 `workflow / analysis-run / artifact / audit` 跳转
-- 移动端在 Inspector 收起后，选中新事件会自动展开该面板
+- project workspace 当前已经改成三栏工作区：对象链导航、阶段式 `project_timeline` 主投影、主画布和独立 Inspector
+- `project_timeline` 当前已不再是简单事件列表，而是由 `workflow / analysis_run / artifact / assertion / evidence / review / export` 与 live events 联合投影出的 6 段阶段 timeline
+- workspace 在收到会改变 ledger 投影的 SSE 后，当前会主动 refresh server projection；live event feed、stage cards 和 route-object inspector 不再长期停留在首屏 SSR 快照
+- `InspectorPanel` 当前既能承接阶段焦点，也能承接具体事件焦点；事件焦点会展示 `trace / request / payload` 与 `workflow / analysis-run / artifact / audit` 跳转
+- project detail route 当前还会把 Inspector 默认切到当前 canonical object；`workflow / analysis-run / artifact / assertion / manuscript / export_job` 详情页会展示 upstream / grounding / consumer 邻接跳转，而不是只显示静态摘要
+- artifact detail 主画布当前已经不是静态 metadata 卡片：live lineage graph 会展示 upstream / grounding / consumer 三栏邻接；对导出产物，graph 与 Inspector 都会经由 `export_job` 反解回 source manuscript
+- `Review Gate` 当前已按 active manuscript 的 current version window 收口；旧 review 不再持续污染新 version 的工作区阶段状态
+- 移动端在 Inspector 收起后，切换阶段或选中新事件都会自动展开该面板
+- 浏览器侧 live detail 组件当前不会再直接 import 带 `server-only` 依赖的 server client；`workflow` / `manuscript` detail 的增量刷新改为浏览器侧定向 `fetch`，避免 Next build 把 server-only 模块卷入 client bundle
+- `evidence_link` 当前已产品化为独立 detail route（`/evidence-links/[linkId]`），Inspector 把 `evidenceLink` 视为 canonical route object 并展示 upstream assertion / evidence source / consumer manuscript 邻接
+- `evidence_link` detail 当前会优先消费 persisted `source_chunk`，并在缺失 chunk 时才回落到 `evidence_source.metadata_json` preview；主画布会显示 chunk 元数据和高亮片段，workspace Inspector 也会把 quoted span / source preview 带入当前对象摘要，而不是只显示 span 坐标 JSON
+- evidence dashboard 当前每条 evidence link 都可以直接跳转到独立 detail 页面；assertion focus Inspector 也会把 evidence links 按条目展示而非只显示 registry 汇总
+- artifact lineage graph 当前支持 `figure/table → result_json` 图谱浏览：`derives` edge 反向追溯到 parent result_json，grounding 栏合并展示 direct + inherited assertions 以及逐条 evidence link；result_json 详情页也会在 consumers 栏展示 derived figure/table children
 
 ### 2.3 Local Deployment / Compose
 
@@ -147,11 +169,11 @@
 - canonical DDL 已通过 `sql/ddl_research_ledger_v2.sql` 在数据库中初始化，但当前业务读写主路径仍是开发态快照适配层
 - 这意味着“数据库结构已初始化”和“业务仓储已完全切换到 row-level PostgreSQL”是两件不同的事，后者尚未完成
 
-## 3. 2026-04-05 已验证记录
+## 3. 最新验证记录
+
+### 3.1 Backend / Guardrails（2026-04-06）
 
 本次整理时重新执行并确认通过的命令包括：
-
-### 3.1 Backend / Guardrails
 
 ```bash
 .venv/bin/python -m pytest -q
@@ -162,14 +184,15 @@
 
 结果：
 
-- `pytest`: `38 passed`
+- `pytest`: `56 passed`
 - `check_architecture`: passed
 - `check_vocabulary`: passed
 - `export_frontend_contracts --check`: passed
 
-### 3.2 Frontend
+### 3.2 Frontend（最新确认：2026-04-06）
 
 ```bash
+cd frontend && npm run test
 cd frontend && npm run lint
 cd frontend && npm run typecheck
 cd frontend && npm run build
@@ -178,17 +201,19 @@ cd frontend && npm run test:e2e
 
 结果：
 
+- `test`: passed
 - `lint`: passed
 - `typecheck`: passed
 - `build`: passed
-- `test:e2e`: `3 passed, 3 skipped`
+- `test:e2e`: `10 passed, 10 skipped`
 
 补充说明：
 
 - `typecheck` 当前已改为 `next typegen + tsc --noEmit --incremental false`
 - 这样可以避免 `.next/types` 残留状态导致的假失败
+- 本轮新增 E2E 已覆盖 export detail route、artifact lineage graph live adjacency、以及 export output artifact 到 manuscript upstream 的回链
 
-### 3.3 Compose Smoke Test
+### 3.3 Compose Smoke Test（最新确认：2026-04-05）
 
 2026-04-05 当天已完成一次运行级 smoke test，验证命令为：
 
@@ -235,6 +260,8 @@ docker compose --profile postgres ps
 - rootless / 断网 / run-to-completion 的远程执行面
 - 真正的 DOCX / PDF 渲染链，而不是 metadata 级导出对象
 - 生产级 RLS、审计归档、搜索索引与外部系统集成
+- `evidence_link` detail route、`evidence_chunk` create/list/detail、inline source preview、span highlighting 与 `figure/table -> result_json -> assertion -> evidence -> manuscript block` 主图谱浏览已产品化；剩余缺口收敛为多 chunk source 的更完整浏览面、chunk 级独立 detail route，以及真正来自外部 ingest / parser 的 chunk provenance，而不是只靠 source upsert 时的 inline preview materialization
+- `discussion mode / analysis_planning` 还没有形成面向用户的完整产品化前置流程
 
 ## 6. 目前最准确的工程判断
 

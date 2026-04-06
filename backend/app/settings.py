@@ -12,11 +12,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @dataclass(frozen=True, slots=True)
 class AppSettings:
-    ledger_backend: Literal["memory", "json", "postgres"]
+    ledger_backend: Literal["memory", "json", "postgres", "postgres_rowlevel"]
     ledger_path: Path
     object_store_path: Path
     postgres_dsn: str | None
     postgres_schema: str
+    postgres_pool_min: int
+    postgres_pool_max: int
     auth_mode: Literal["dev_headers", "jwt", "mixed"]
     auth_jwt_secret: str | None
     auth_oidc_discovery_url: str | None
@@ -68,13 +70,15 @@ def _env_list(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
 @lru_cache
 def get_settings() -> AppSettings:
     ledger_backend = os.getenv("DROS_LEDGER_BACKEND", "memory").strip().lower() or "memory"
-    if ledger_backend not in {"memory", "json", "postgres"}:
+    if ledger_backend not in {"memory", "json", "postgres", "postgres_rowlevel"}:
         raise ValueError(f"unsupported DROS_LEDGER_BACKEND: {ledger_backend}")
 
     ledger_path_raw = os.getenv("DROS_LEDGER_PATH", str(ROOT / ".dros" / "ledger.json"))
     object_store_path_raw = os.getenv("DROS_OBJECT_STORE_PATH", str(ROOT / ".dros" / "object-store"))
     postgres_dsn = os.getenv("DROS_POSTGRES_DSN", "").strip() or None
-    postgres_schema = os.getenv("DROS_POSTGRES_SCHEMA", "dr_os_dev").strip() or "dr_os_dev"
+    postgres_schema = os.getenv("DROS_POSTGRES_SCHEMA", "dr_os").strip() or "dr_os"
+    postgres_pool_min = int(os.getenv("DROS_POSTGRES_POOL_MIN", "2").strip() or "2")
+    postgres_pool_max = int(os.getenv("DROS_POSTGRES_POOL_MAX", "10").strip() or "10")
     auth_mode = os.getenv("DROS_AUTH_MODE", "dev_headers").strip().lower() or "dev_headers"
     if auth_mode not in {"dev_headers", "jwt", "mixed"}:
         raise ValueError(f"unsupported DROS_AUTH_MODE: {auth_mode}")
@@ -120,8 +124,8 @@ def get_settings() -> AppSettings:
     ncbi_rate_limit_raw = os.getenv("DROS_NCBI_RATE_LIMIT_PER_SEC", "").strip()
     ncbi_rate_limit_per_sec = float(ncbi_rate_limit_raw) if ncbi_rate_limit_raw else None
     ncbi_timeout_seconds = float(os.getenv("DROS_NCBI_TIMEOUT_SECONDS", "10").strip() or "10")
-    if ledger_backend == "postgres" and not postgres_dsn:
-        raise ValueError("DROS_POSTGRES_DSN is required when DROS_LEDGER_BACKEND=postgres")
+    if ledger_backend in {"postgres", "postgres_rowlevel"} and not postgres_dsn:
+        raise ValueError("DROS_POSTGRES_DSN is required when DROS_LEDGER_BACKEND=postgres or postgres_rowlevel")
     if (
         auth_mode in {"jwt", "mixed"}
         and not auth_jwt_secret
@@ -146,6 +150,8 @@ def get_settings() -> AppSettings:
         object_store_path=Path(object_store_path_raw).expanduser(),
         postgres_dsn=postgres_dsn,
         postgres_schema=postgres_schema,
+        postgres_pool_min=postgres_pool_min,
+        postgres_pool_max=postgres_pool_max,
         auth_mode=auth_mode,
         auth_jwt_secret=auth_jwt_secret,
         auth_oidc_discovery_url=auth_oidc_discovery_url,

@@ -30,6 +30,7 @@
 5. `artifact / assertion / evidence_link / audit_event` 默认 append-only。
 6. 文件内容不直接入库，数据库只存 `storage_uri + sha256 + metadata`。
 7. 所有用户可见事实必须能追到 `assertion_id`。
+8. timeline、inspector、resume 都是 ledger projection，不是新的真相表。
 
 ## 3. Artifact Lineage DAG
 
@@ -45,6 +46,26 @@ flowchart LR
   MB --> RV[Review]
   MB --> EX[Export Job]
 ```
+
+## 3.1 派生产品视图
+
+以下能力是产品一等交互面，但都必须由现有 canonical object 派生，不能新增“聊天真相层”：
+
+- `project_timeline`
+  - 来源：`workflow_instances`、`workflow_tasks`、schema-backed domain events、`audit_events`
+  - 用途：展示 `数据导入中 / 模板运行中 / 证据核验中 / 稿件待审中`
+- `run_visualization`
+  - 来源：`workflow_tasks`、`analysis_runs.runtime_manifest_json`、关联 `artifacts`
+  - 用途：解释当前 run 处于哪一阶段、卡在哪一步、已经产出了什么
+- `artifact_inspector`
+  - 来源：`lineage_edges`、`assertions`、`evidence_links`、`block_assertion_links`、`reviews`、`export_jobs`
+  - 用途：支持 `artifact -> assertion -> evidence -> manuscript block` 的双向跳转
+- `resume_entrypoint`
+  - 来源：`workflow_instances.parent_workflow_id`、`analysis_runs.rerun_of_run_id`、`artifacts.superseded_by`、`manuscript_blocks.version_no`
+  - 用途：为 rollback / resume 提供稳定入口，不允许原地改写历史对象
+- `discussion_mode`
+  - 定义：`analysis_planning` workflow 的一种交互模式，不是新的持久化对象
+  - durable output：workflow task payload、planning artifact、review、audit_event
 
 ## 4. 核心对象分层
 
@@ -224,6 +245,8 @@ flowchart LR
 
 - 只有 `Workflow Service` 能迁移 `state`
 - Agent 只能返回建议状态
+- `parent_workflow_id` 用于表达 resume / fork 自历史 workflow 继续，而不是修改原 workflow 状态
+- `workflow_type` 可以用于表达 `analysis_planning` 这类前置 planning workflow
 
 ### 5.9 `workflow_tasks`
 
@@ -240,6 +263,11 @@ flowchart LR
 - `input_payload_json`
 - `output_payload_json`
 - `retry_count`
+
+说明：
+
+- `input_payload_json / output_payload_json` 可以承载结构化 phase label、checkpoint 摘要、阻断原因和待人工确认项
+- `workflow_tasks` 不保存未核验统计结果，也不替代 artifact / assertion
 
 ### 5.10 `analysis_runs`
 
@@ -262,12 +290,18 @@ flowchart LR
 - `runtime_manifest_json`
 - `input_artifact_manifest_json`
 - `job_ref`
+- `rerun_of_run_id`
 - `error_class`
 - `error_message_trunc`
 
 `repro_fingerprint` 建议计算：
 
 `sha256(snapshot_hash + template_version + script_hash + param_hash + random_seed + image_digest)`
+
+说明：
+
+- `runtime_manifest_json` 应记录 runner 模式、阶段 checkpoint、输入输出摘要和可视化所需的稳定元数据
+- `rerun_of_run_id` 用于表达分析恢复、重跑或基于历史 run 的新分支
 
 ### 5.11 `artifacts`
 
@@ -280,6 +314,7 @@ flowchart LR
 - `project_id`
 - `run_id`
 - `artifact_type`
+- `output_slot`
 - `storage_uri`
 - `mime_type`
 - `sha256`
@@ -290,7 +325,14 @@ flowchart LR
 约束：
 
 - `unique(sha256, storage_uri)`
+- `unique(run_id, artifact_type, output_slot) where output_slot is not null`
 - 不允许原地覆盖
+
+说明：
+
+- `metadata_json` 可以存放 Inspector 所需的展示提示，例如图表面板、统计段落键、生成来源摘要
+- `output_slot` 是 runner / artifact emitter 为稳定输出位点声明的正式字段，用于 rerun supersede 和 inspector 对位
+- `metadata_json` 不能替代显式 lineage edge、assertion source、evidence link 或 `output_slot`
 
 ### 5.12 `lineage_edges`
 
@@ -435,6 +477,10 @@ flowchart LR
 - `target_journal`
 - `created_by`
 
+说明：
+
+- `manuscript` 的 rollback 语义不是把 `current_version_no` 改回去，而是从历史 `version_no` 派生新的 current version
+
 ### 5.18 `manuscript_blocks`
 
 用途：结构化 block，不等于 assertion。
@@ -452,6 +498,11 @@ flowchart LR
 - `content_md`
 - `status`
 - `supersedes_block_id`
+
+说明：
+
+- `version_no` 是稿件级 rollback / resume 的核心锚点
+- `supersedes_block_id` 用于在同一稿件内保留 block 级替换链
 
 ### 5.19 `block_assertion_links`
 
@@ -481,11 +532,17 @@ flowchart LR
 - `review_type`
 - `target_kind`
 - `target_id`
+- `target_version_no`
 - `state`
 - `reviewer_id`
 - `checklist_json`
 - `comments`
 - `decided_at`
+
+说明：
+
+- 当 `target_kind=manuscript` 时，`target_version_no` 用于把 review 绑定到明确稿件版本，避免旧版本审核状态污染当前 manuscript chain
+- 其他 target kind 的 review 保持 `target_version_no = null`
 
 ### 5.21 `export_jobs`
 
@@ -530,7 +587,22 @@ flowchart LR
 - 关键动作都必须入审计
 - 归档层再做 WORM
 
-## 6. 行级安全与追加写
+## 6. 版本、恢复与续做语义
+
+- `dataset rollback`
+  - 语义：选择历史 `dataset_snapshot` 并启动新的 workflow
+  - 约束：历史 snapshot 不可变
+- `workflow resume`
+  - 语义：创建新的 child `workflow_instance`，通过 `parent_workflow_id` 连接父链
+  - 约束：原 workflow 保持原状态，审计中显式记录为什么恢复、由谁恢复
+- `analysis rerun / resume`
+  - 语义：创建新的 `analysis_run`
+  - 链路：通过 `rerun_of_run_id` 连接 run 链，通过 artifact `supersedes` 连接输出链
+- `manuscript rollback / resume`
+  - 语义：从历史 `version_no` 派生新的 current version，而不是覆盖旧版本
+  - 约束：导出永远绑定某个明确版本，verify 结果也必须带版本号
+
+## 7. 行级安全与追加写
 
 关键表默认要求：
 
@@ -562,7 +634,7 @@ append-only 默认对象：
 - `evidence_links`
 - `audit_events`
 
-## 7. 结论
+## 8. 结论
 
 DR-OS 的数据模型重点不是“把多少对象存进库”，而是把所有关键对象都纳入同一条可追溯链：
 

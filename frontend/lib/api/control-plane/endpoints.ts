@@ -48,7 +48,13 @@ export const controlPlaneRoutes = {
     evidenceSearch: (projectId: string) => `/v1/projects/${projectId}/evidence/search`,
     evidenceResolve: (projectId: string) => `/v1/projects/${projectId}/evidence/resolve`,
     evidence: (projectId: string) => `/v1/projects/${projectId}/evidence`,
+    evidenceChunks: (projectId: string, evidenceSourceId: string) =>
+      `/v1/projects/${projectId}/evidence/${evidenceSourceId}/chunks`,
+    evidenceChunk: (projectId: string, chunkId: string) =>
+      `/v1/projects/${projectId}/evidence/chunks/${chunkId}`,
     evidenceLinks: (projectId: string) => `/v1/projects/${projectId}/evidence-links`,
+    evidenceLink: (projectId: string, linkId: string) =>
+      `/v1/projects/${projectId}/evidence-links/${linkId}`,
     verifyEvidenceLink: (projectId: string, linkId: string) =>
       `/v1/projects/${projectId}/evidence-links/${linkId}/verify`,
     manuscripts: (projectId: string) => `/v1/projects/${projectId}/manuscripts`,

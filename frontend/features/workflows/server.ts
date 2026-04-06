@@ -3,12 +3,10 @@ import type {
   AnalysisRunRead,
   AnalysisTemplateRead,
   ArtifactRead,
-  GateEvaluationRead,
   WorkflowDetailResponse,
   WorkflowInstanceRead,
-  WorkflowTaskRead,
 } from "@/lib/api/generated/control-plane";
-import type { WorkflowSnapshotOption } from "@/features/workflows/types";
+import { toWorkflowDetailViewModel, type WorkflowDetailViewModel, type WorkflowSnapshotOption } from "@/features/workflows/types";
 
 async function getWorkflowSnapshotOptions(projectId: string): Promise<WorkflowSnapshotOption[]> {
   const client = await createServerControlPlaneClient({ cache: "no-store" });
@@ -115,19 +113,7 @@ export async function getAnalysisRunDetailPageData(
   };
 }
 
-export interface WorkflowDetailViewModel {
-  gateEvaluations: GateEvaluationRead[];
-  tasks: WorkflowTaskRead[];
-  workflow: WorkflowInstanceRead;
-}
-
-export function toWorkflowDetailViewModel(detail: WorkflowDetailResponse): WorkflowDetailViewModel {
-  return {
-    gateEvaluations: detail.gate_evaluations ?? [],
-    tasks: detail.tasks ?? [],
-    workflow: detail.workflow,
-  };
-}
+export { toWorkflowDetailViewModel, type WorkflowDetailViewModel } from "@/features/workflows/types";
 
 export async function getWorkflowSupportData(projectId: string): Promise<{
   analysisRuns: AnalysisRunRead[];

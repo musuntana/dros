@@ -333,6 +333,17 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'table % is append-only', TG_TABLE_NAME;
+  END IF;
+  -- allow setting superseded_by on artifacts (only from NULL to non-NULL)
+  IF TG_TABLE_NAME = 'artifacts'
+     AND OLD.superseded_by IS NULL
+     AND NEW.superseded_by IS NOT NULL
+     AND OLD.id = NEW.id
+  THEN
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'table % is append-only', TG_TABLE_NAME;
 END;
 $$;
@@ -556,6 +567,7 @@ CREATE TABLE IF NOT EXISTS dr_os.artifacts (
   project_id UUID NOT NULL REFERENCES dr_os.projects(id) ON DELETE CASCADE,
   run_id UUID REFERENCES dr_os.analysis_runs(id) ON DELETE CASCADE,
   artifact_type dr_os.artifact_type NOT NULL,
+  output_slot TEXT,
   storage_uri TEXT NOT NULL,
   mime_type TEXT,
   sha256 TEXT NOT NULL,
@@ -570,6 +582,10 @@ CREATE TABLE IF NOT EXISTS dr_os.artifacts (
 
 CREATE INDEX IF NOT EXISTS artifacts_run_type_idx
   ON dr_os.artifacts (run_id, artifact_type);
+
+CREATE UNIQUE INDEX IF NOT EXISTS artifacts_run_type_output_slot_uidx
+  ON dr_os.artifacts (run_id, artifact_type, output_slot)
+  WHERE output_slot IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS dr_os.lineage_edges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -739,6 +755,7 @@ CREATE TABLE IF NOT EXISTS dr_os.reviews (
   review_type dr_os.review_type NOT NULL,
   target_kind dr_os.lineage_kind NOT NULL,
   target_id UUID NOT NULL,
+  target_version_no INTEGER CHECK (target_version_no >= 1),
   state dr_os.review_state NOT NULL DEFAULT 'pending',
   reviewer_id UUID REFERENCES dr_os.principals(id),
   checklist_json JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -752,6 +769,9 @@ CREATE INDEX IF NOT EXISTS reviews_project_state_idx
 
 CREATE INDEX IF NOT EXISTS reviews_target_idx
   ON dr_os.reviews (target_kind, target_id);
+
+CREATE INDEX IF NOT EXISTS reviews_target_version_idx
+  ON dr_os.reviews (target_kind, target_id, target_version_no);
 
 CREATE TABLE IF NOT EXISTS dr_os.export_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

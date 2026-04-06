@@ -8,8 +8,23 @@ from uuid import UUID, uuid4
 
 from ..repositories.base import append_audit_event
 from ..schemas.api import CreateArtifactRequest
-from ..schemas.domain import AnalysisRunRead, AnalysisTemplateRead, DatasetSnapshotRead, WorkflowTaskRead
-from ..schemas.enums import AnalysisRunState, ArtifactType, LineageKind, TaskState, TemplateReviewStatus, WorkflowState
+from ..schemas.domain import (
+    AnalysisRunRead,
+    AnalysisTemplateRead,
+    ArtifactRead,
+    DatasetSnapshotRead,
+    LineageEdgeRead,
+    WorkflowTaskRead,
+)
+from ..schemas.enums import (
+    AnalysisRunState,
+    ArtifactType,
+    LineageEdgeType,
+    LineageKind,
+    TaskState,
+    TemplateReviewStatus,
+    WorkflowState,
+)
 from .artifact_service import ArtifactService
 from .base import BaseService
 
@@ -22,9 +37,17 @@ class AnalysisExecutionError(RuntimeError):
         self.error_message = error_message
 
 
+PRIMARY_RESULT_OUTPUT_SLOT = "analysis.result.primary"
+PRIMARY_TABLE_OUTPUT_SLOT = "analysis.table.primary"
+PRIMARY_FIGURE_OUTPUT_SLOT = "analysis.figure.primary"
+PRIMARY_MANIFEST_OUTPUT_SLOT = "analysis.manifest.primary"
+PRIMARY_LOG_OUTPUT_SLOT = "analysis.log.primary"
+
+
 @dataclass(frozen=True, slots=True)
 class RunnerArtifactSpec:
     artifact_type: ArtifactType
+    output_slot: str | None
     storage_uri: str
     mime_type: str | None
     metadata_json: dict[str, Any]
@@ -280,11 +303,15 @@ class DeterministicAnalysisRunner(BaseService):
             )
         checks.append("phi_scan_cleared")
 
-        if snapshot.deid_status.value == "failed":
+        if snapshot.deid_status.value not in {"not_required", "completed"}:
+            if snapshot.deid_status.value == "failed":
+                error_message = f"snapshot {snapshot.id} deidentification failed"
+            else:
+                error_message = f"snapshot {snapshot.id} deidentification not completed: {snapshot.deid_status.value}"
             raise AnalysisExecutionError(
                 exit_code=68,
                 error_class="PreflightValidationError",
-                error_message=f"snapshot {snapshot.id} deidentification failed",
+                error_message=error_message,
             )
         checks.append("deidentification_allowed")
         return checks
@@ -311,6 +338,7 @@ class DeterministicAnalysisRunner(BaseService):
         sample_size = snapshot.row_count or 0
         return {
             "kind": "cox_summary",
+            "output_slot": PRIMARY_RESULT_OUTPUT_SLOT,
             "template_id": str(template.id),
             "template_code": template.code,
             "template_version": template.version,
@@ -350,6 +378,7 @@ class DeterministicAnalysisRunner(BaseService):
         artifact_specs.append(
             RunnerArtifactSpec(
                 artifact_type=ArtifactType.MANIFEST,
+                output_slot=PRIMARY_MANIFEST_OUTPUT_SLOT,
                 storage_uri=f"object://analysis-runs/{run.id}/manifest.json",
                 mime_type="application/json",
                 metadata_json={
@@ -372,6 +401,7 @@ class DeterministicAnalysisRunner(BaseService):
         artifact_specs.append(
             RunnerArtifactSpec(
                 artifact_type=ArtifactType.LOG,
+                output_slot=PRIMARY_LOG_OUTPUT_SLOT,
                 storage_uri=f"object://analysis-runs/{run.id}/runner.log",
                 mime_type="text/plain",
                 metadata_json={
@@ -405,6 +435,7 @@ class DeterministicAnalysisRunner(BaseService):
             body = json.dumps(result_payload_json, sort_keys=True)
             return RunnerArtifactSpec(
                 artifact_type=artifact_type,
+                output_slot=PRIMARY_RESULT_OUTPUT_SLOT,
                 storage_uri=f"object://analysis-runs/{run.id}/result.json",
                 mime_type="application/json",
                 metadata_json=result_payload_json,
@@ -423,6 +454,7 @@ class DeterministicAnalysisRunner(BaseService):
             }
             return RunnerArtifactSpec(
                 artifact_type=artifact_type,
+                output_slot=PRIMARY_TABLE_OUTPUT_SLOT,
                 storage_uri=f"object://analysis-runs/{run.id}/summary-table.csv",
                 mime_type="text/csv",
                 metadata_json=table_payload,
@@ -446,6 +478,7 @@ class DeterministicAnalysisRunner(BaseService):
             }
             return RunnerArtifactSpec(
                 artifact_type=artifact_type,
+                output_slot=PRIMARY_FIGURE_OUTPUT_SLOT,
                 storage_uri=f"object://analysis-runs/{run.id}/kaplan-meier.png",
                 mime_type="image/png",
                 metadata_json=figure_payload,
@@ -524,14 +557,20 @@ class InlineArtifactEmitter(BaseService):
     repository: object
 
     def emit(self, *, run: AnalysisRunRead, artifact_specs: list[RunnerArtifactSpec]) -> list[UUID]:
-        artifact_service = ArtifactService(repository=self.repository)
+        from ..repositories.artifact_repository import ArtifactRepository
+
+        artifact_repo = ArtifactRepository()
+        artifact_service = ArtifactService(repository=artifact_repo)
         artifact_ids: list[UUID] = []
+        supersede_pairs: list[dict[str, str | None]] = []
+        prior_artifacts = self._index_prior_run_artifacts(artifact_repo, run)
         for spec in artifact_specs:
             response = artifact_service.create_artifact(
                 run.project_id,
                 CreateArtifactRequest(
                     run_id=run.id,
                     artifact_type=spec.artifact_type,
+                    output_slot=spec.output_slot,
                     storage_uri=spec.storage_uri,
                     mime_type=spec.mime_type,
                     sha256=spec.sha256_digest(),
@@ -540,15 +579,119 @@ class InlineArtifactEmitter(BaseService):
                 ),
             )
             artifact_ids.append(response.artifact.id)
+            superseded_artifact = self._pop_superseded_artifact(prior_artifacts, spec)
+            if superseded_artifact is not None:
+                self._create_supersedes_edge(
+                    artifact_repo=artifact_repo,
+                    project_id=run.project_id,
+                    superseded_artifact=superseded_artifact,
+                    new_artifact=response.artifact,
+                )
+                supersede_pairs.append(
+                    {
+                        "from_artifact_id": str(superseded_artifact.id),
+                        "to_artifact_id": str(response.artifact.id),
+                        "artifact_type": response.artifact.artifact_type.value,
+                        "output_slot": response.artifact.output_slot,
+                    }
+                )
         self._create_workflow_task(
             run=run,
             task_key="artifact_emit",
             task_type="artifact_emit",
             state=TaskState.COMPLETED,
             input_payload_json={"analysis_run_id": str(run.id)},
-            output_payload_json={"artifact_ids": [str(artifact_id) for artifact_id in artifact_ids]},
+            output_payload_json={
+                "artifact_ids": [str(artifact_id) for artifact_id in artifact_ids],
+                "supersedes": supersede_pairs,
+            },
         )
         return artifact_ids
+
+    def _index_prior_run_artifacts(
+        self,
+        artifact_repo,
+        run: AnalysisRunRead,
+    ) -> dict[tuple[str, str], list[ArtifactRead]]:
+        if run.rerun_of_run_id is None:
+            return {}
+        with artifact_repo.unit_of_work() as uow:
+            candidates = artifact_repo.list_unsuperseded_by_run(
+                uow, run.project_id, run.rerun_of_run_id,
+            )
+        prior_artifacts: dict[tuple[str, str], list[ArtifactRead]] = {}
+        for artifact in candidates:
+            identity = self._artifact_identity(artifact.artifact_type, artifact.output_slot)
+            if identity is None:
+                continue
+            prior_artifacts.setdefault(identity, []).append(artifact)
+        return prior_artifacts
+
+    def _pop_superseded_artifact(
+        self,
+        prior_artifacts: dict[tuple[str, str], list[ArtifactRead]],
+        spec: RunnerArtifactSpec,
+    ) -> ArtifactRead | None:
+        identity = self._artifact_identity(spec.artifact_type, spec.output_slot)
+        if identity is None:
+            return None
+        candidates = prior_artifacts.get(identity)
+        if not candidates:
+            return None
+        if len(candidates) != 1:
+            return None
+        superseded_artifact = candidates.pop(0)
+        if not candidates:
+            prior_artifacts.pop(identity, None)
+        return superseded_artifact
+
+    def _artifact_identity(
+        self,
+        artifact_type: ArtifactType,
+        output_slot: str | None,
+    ) -> tuple[str, str] | None:
+        if output_slot is None:
+            return None
+        return (artifact_type.value, output_slot)
+
+    def _create_supersedes_edge(
+        self,
+        *,
+        artifact_repo,
+        project_id: UUID,
+        superseded_artifact: ArtifactRead,
+        new_artifact: ArtifactRead,
+    ) -> None:
+        now = self.now()
+        edge = LineageEdgeRead(
+            id=uuid4(),
+            tenant_id=self.repository.tenant_id,
+            project_id=project_id,
+            from_kind=LineageKind.ARTIFACT,
+            from_id=superseded_artifact.id,
+            edge_type=LineageEdgeType.SUPERSEDES,
+            to_kind=LineageKind.ARTIFACT,
+            to_id=new_artifact.id,
+            created_at=now,
+        )
+        with artifact_repo.unit_of_work() as uow:
+            artifact_repo.update_superseded_by(uow, superseded_artifact.id, new_artifact.id)
+            artifact_repo.insert_lineage_edge(uow, edge)
+            artifact_repo.append_audit_event_uow(
+                uow,
+                project_id=project_id,
+                event_type="lineage.edge.created",
+                target_kind=LineageKind.ARTIFACT,
+                target_id=new_artifact.id,
+                payload_json={
+                    "from_kind": LineageKind.ARTIFACT.value,
+                    "from_id": str(superseded_artifact.id),
+                    "edge_type": LineageEdgeType.SUPERSEDES.value,
+                    "to_kind": LineageKind.ARTIFACT.value,
+                    "to_id": str(new_artifact.id),
+                },
+                actor_id=self.repository.actor_id,
+            )
 
     def _create_workflow_task(
         self,

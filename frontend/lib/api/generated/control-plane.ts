@@ -111,6 +111,7 @@ export type ArtifactRead = {
     [key: string]: unknown;
   };
   mime_type?: string | null;
+  output_slot?: string | null;
   project_id: string;
   run_id?: string | null;
   sha256: string;
@@ -225,6 +226,7 @@ export type CreateAnalysisRunRequest = {
     [key: string]: unknown;
   };
   random_seed?: number;
+  rerun_of_run_id?: string | null;
   snapshot_id: string;
   template_id: string;
   workflow_instance_id?: string | null;
@@ -240,6 +242,7 @@ export type CreateArtifactRequest = {
     [key: string]: unknown;
   };
   mime_type?: string | null;
+  output_slot?: string | null;
   run_id?: string | null;
   sha256: string;
   size_bytes?: number | null;
@@ -286,6 +289,16 @@ export type CreateDatasetSnapshotRequest = {
 
 export type CreateDatasetSnapshotResponse = {
   snapshot: DatasetSnapshotRead;
+};
+
+export type CreateEvidenceChunkRequest = {
+  char_start?: number;
+  section_label?: string | null;
+  text: string;
+};
+
+export type CreateEvidenceChunkResponse = {
+  evidence_chunk: EvidenceChunkRead;
 };
 
 export type CreateEvidenceLinkRequest = {
@@ -378,6 +391,7 @@ export type CreateReviewRequest = {
   reviewer_id?: string | null;
   target_id: string;
   target_kind: LineageKind;
+  target_version_no?: number | null;
 };
 
 export type CreateReviewResponse = {
@@ -450,6 +464,36 @@ export type DatasetSnapshotRead = {
 export type DatasetSourceKind = "upload" | "geo" | "tcga" | "seer" | "manual";
 
 export type DeidStatus = "not_required" | "pending" | "completed" | "failed";
+
+export type EvidenceChunkDetailResponse = {
+  evidence_chunk: EvidenceChunkRead;
+  evidence_source: EvidenceSourceRead;
+};
+
+export type EvidenceChunkListResponse = {
+  items: Page_EvidenceChunkRead_;
+};
+
+export type EvidenceChunkRead = {
+  char_end: number;
+  char_start: number;
+  chunk_no: number;
+  created_at: string;
+  evidence_source_id: string;
+  id: string;
+  section_label?: string | null;
+  text: string;
+  token_count: number;
+};
+
+export type EvidenceLinkDetailResponse = {
+  assertion: AssertionRead;
+  evidence_link: EvidenceLinkRead;
+  evidence_source: EvidenceSourceRead;
+  source_artifact?: ArtifactRead | null;
+  source_chunk?: EvidenceChunkRead | null;
+  source_run?: AnalysisRunRead | null;
+};
 
 export type EvidenceLinkListResponse = {
   items: Page_EvidenceLinkRead_;
@@ -668,6 +712,11 @@ export type Page_DatasetRead_ = {
   page: PageInfo;
 };
 
+export type Page_EvidenceChunkRead_ = {
+  items: Array<EvidenceChunkRead>;
+  page: PageInfo;
+};
+
 export type Page_EvidenceLinkRead_ = {
   items: Array<EvidenceLinkRead>;
   page: PageInfo;
@@ -710,6 +759,7 @@ export type ProjectDetailResponse = {
   review_summary?: {
     [key: string]: number;
   };
+  review_summary_scope?: ReviewSummaryScopeRead | null;
 };
 
 export type ProjectListResponse = {
@@ -795,10 +845,18 @@ export type ReviewRead = {
   state: ReviewState;
   target_id: string;
   target_kind: LineageKind;
+  target_version_no?: number | null;
   tenant_id: string;
 };
 
 export type ReviewState = "pending" | "approved" | "rejected" | "changes_requested";
+
+export type ReviewSummaryScopeRead = {
+  label?: string | null;
+  target_id: string;
+  target_kind: LineageKind;
+  target_version_no?: number | null;
+};
 
 export type ReviewType = "evidence" | "analysis" | "manuscript" | "export";
 
@@ -1028,6 +1086,8 @@ export interface ControlPlaneSchemaRegistry {
   "CreateDatasetResponse": CreateDatasetResponse;
   "CreateDatasetSnapshotRequest": CreateDatasetSnapshotRequest;
   "CreateDatasetSnapshotResponse": CreateDatasetSnapshotResponse;
+  "CreateEvidenceChunkRequest": CreateEvidenceChunkRequest;
+  "CreateEvidenceChunkResponse": CreateEvidenceChunkResponse;
   "CreateEvidenceLinkRequest": CreateEvidenceLinkRequest;
   "CreateEvidenceLinkResponse": CreateEvidenceLinkResponse;
   "CreateExportJobRequest": CreateExportJobRequest;
@@ -1054,6 +1114,10 @@ export interface ControlPlaneSchemaRegistry {
   "DatasetSnapshotRead": DatasetSnapshotRead;
   "DatasetSourceKind": DatasetSourceKind;
   "DeidStatus": DeidStatus;
+  "EvidenceChunkDetailResponse": EvidenceChunkDetailResponse;
+  "EvidenceChunkListResponse": EvidenceChunkListResponse;
+  "EvidenceChunkRead": EvidenceChunkRead;
+  "EvidenceLinkDetailResponse": EvidenceLinkDetailResponse;
   "EvidenceLinkListResponse": EvidenceLinkListResponse;
   "EvidenceLinkRead": EvidenceLinkRead;
   "EvidenceRelationType": EvidenceRelationType;
@@ -1090,6 +1154,7 @@ export interface ControlPlaneSchemaRegistry {
   "Page_AssertionRead_": Page_AssertionRead_;
   "Page_AuditEventRead_": Page_AuditEventRead_;
   "Page_DatasetRead_": Page_DatasetRead_;
+  "Page_EvidenceChunkRead_": Page_EvidenceChunkRead_;
   "Page_EvidenceLinkRead_": Page_EvidenceLinkRead_;
   "Page_EvidenceSourceRead_": Page_EvidenceSourceRead_;
   "Page_ExportJobRead_": Page_ExportJobRead_;
@@ -1115,6 +1180,7 @@ export interface ControlPlaneSchemaRegistry {
   "ReviewListResponse": ReviewListResponse;
   "ReviewRead": ReviewRead;
   "ReviewState": ReviewState;
+  "ReviewSummaryScopeRead": ReviewSummaryScopeRead;
   "ReviewType": ReviewType;
   "RunVerificationRequest": RunVerificationRequest;
   "RunVerificationResponse": RunVerificationResponse;

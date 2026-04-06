@@ -3,8 +3,8 @@
 ## 1. 文档信息
 
 - 产品名称：Doctor Research OS（DR-OS）
-- 文档版本：v2.1
-- 文档状态：Aligned Baseline
+- 文档版本：v2.2
+- 文档状态：Enhanced Product Surface Baseline
 - 仓库入口：见 `README.md`
 - 实现快照：见 `docs/implementation-status.md`
 - 本地部署：见 `docs/local-deployment.md`
@@ -56,6 +56,13 @@ DR-OS 不是通用聊天助手，也不是开放式科研 Copilot。它是以 `A
 
 `Dataset Snapshot -> Analysis Run -> Artifact -> Assertion -> EvidenceLink -> Manuscript Block -> Review -> Export`
 
+在这个链路之上，产品层默认应该暴露四个工作台能力：
+
+- `Live Timeline / Run Visualization`：让用户看到系统当前处于 `数据导入中 / 模板运行中 / 证据核验中 / 稿件待审中` 哪一阶段
+- `Versioned Rollback / Resume`：回退与恢复作用在 `snapshot / workflow / analysis run / manuscript version`，而不是作用在 Agent 对话
+- `Artifact Inspector`：围绕 artifact、assertion、evidence、manuscript block 做双向跳转
+- `Discussion Mode`：在正式分析前，用受控多角色讨论沉淀研究问题、终点、协变量和分析计划
+
 ## 3. 架构原则
 
 1. `Workflow-first, agent-last`。主干流程由确定性状态机驱动，Agent 只做局部智能节点。
@@ -65,6 +72,9 @@ DR-OS 不是通用聊天助手，也不是开放式科研 Copilot。它是以 `A
 5. `Ledger first`。项目、快照、运行、artifact、assertion、review、audit 都是可追溯对象。
 6. `Least privilege`。每个服务和 Agent 只能访问任务所需的最小数据。
 7. `Append-only by default`。artifact、assertion、evidence_link、audit_event 默认追加写，不原地覆盖。
+8. `Projection over transcript`。运行可视化来自 ledger、workflow detail 和 events 的投影，不来自 LLM 对话 transcript。
+9. `Rollback creates new lineage`。回退与恢复必须创建新的 version / child workflow / rerun 链，不允许把历史对象“改回去”。
+10. `Planning is gated`。立题讨论只能产出结构化计划和待确认项，不能直接越过模板白名单进入分析和写作。
 
 ## 4. 总体架构
 
@@ -197,6 +207,25 @@ flowchart LR
 - 检索：`PostgreSQL FTS/BM25 + pgvector`
 - 审计归档：`WORM`
 
+### 5.5 产品工作台能力
+
+- `Live Timeline / Run Visualization`
+  - 数据源：`workflow_instances`、`workflow_tasks`、schema-backed domain events、`analysis_runs.runtime_manifest_json`、`audit_events`
+  - 目标：回答“现在在做什么、卡在哪、产生了哪些 artifact、下一步等谁”
+  - 明确不做：展示 token 级 Agent 自言自语或不可复算的推理碎片
+- `Versioned Rollback / Resume`
+  - 入口对象：历史 `dataset_snapshot`、`workflow_instance`、`analysis_run`、`manuscript` 版本
+  - 行为语义：创建新的 child workflow、新的 analysis run 或新的 manuscript version；历史版本保持可追溯
+  - 目标：支持“回到上一版图表/分析/稿件继续做”，而不是“撤销聊天”
+- `Artifact Inspector`
+  - 默认主链：`figure/table -> result_json -> assertion -> evidence_link -> manuscript_block -> review/export`
+  - 要求：既能顺链向下看消费方，也能逆链向上看事实来源
+- `Discussion Mode`
+  - 定位：正式 analysis workflow 前的前置 planning workflow
+  - 角色视角：`临床专家 / 统计顾问 / 文献秘书`
+  - durable output：结构化 planning artifact、analysis plan、待审批 review items、audit_event
+  - 非 durable 内容：讨论 transcript 本身
+
 ## 6. 控制面与 Agent 的边界
 
 ### 6.1 确定性服务
@@ -222,6 +251,15 @@ flowchart LR
 - Agent 不能绕过 Evidence Control Plane
 - Agent 不能修改审核后的统计逻辑
 - `Verifier Agent` 不能单独阻断系统；它只输出结构化 verdict，最终阻断由 `Review & Policy Service` 或 `Workflow Service` 决策
+
+### 6.3 前置讨论模式
+
+`Discussion Mode` 不是新的主流程编排器，也不是新的真相层。它是 `analysis_planning` workflow 的一种产品交互形态：
+
+- 用多角色视角帮助用户澄清研究问题、终点定义、纳排标准、协变量和证据缺口
+- 由 `Workflow Service` 驱动，必要时调用 `Search Agent` 和 `Analysis Agent`
+- 最终只允许沉淀为结构化计划结果、planning artifact、review items 和审计事件
+- 不允许把讨论内容直接当作导出稿件、assertion 或模板执行输入
 
 ## 7. Evidence Control Plane
 
@@ -259,15 +297,23 @@ flowchart LR
 
 ## 8. 核心流程
 
-### 8.1 公共数据库课题
+### 8.1 立题讨论与分析计划
+
+`Project -> analysis_planning workflow -> role roundtable -> planning artifact -> human confirm -> analysis plan`
+
+### 8.2 公共数据库课题
 
 `Project -> Dataset Import -> Snapshot -> Workflow -> Analysis Run -> Artifacts -> Assertions -> Evidence Binding -> Manuscript Draft`
 
-### 8.2 临床 Excel 回顾性研究
+### 8.3 临床 Excel 回顾性研究
 
 `Upload -> Snapshot -> PHI / De-id Check -> Workflow -> Standard Bundle -> Artifacts -> Assertions -> Review`
 
-### 8.3 导出前门禁
+### 8.4 版本级恢复与续做
+
+`Historical Snapshot/Run/Version -> Child Workflow or New Manuscript Version -> Verify -> Promote Current`
+
+### 8.5 导出前门禁
 
 `Verify -> Gate Evaluations -> Review Decision -> Export Job -> Export Artifact + Manifest`
 
@@ -275,11 +321,14 @@ flowchart LR
 
 1. 所有用户可见“事实”必须先成为 `assertion`。
 2. 所有 `assertion` 必须至少绑定 `source_run_id / source_artifact_id` 或 `evidence_links`。
-3. `manuscript_block` 不直接引用 `analysis_run`，只能引用 `assertion`。
-4. 所有 artifact 不原地覆盖，只能新增并通过 `supersedes` 建立谱系。
-5. 所有导出前都必须经过 Evidence Control Plane 全链路校验。
-6. 临床模式下，未脱敏数据不得进入外部模型。
-7. 审计日志是 append-only，不允许回写修改。
+3. `project timeline`、`run visualization`、`artifact inspector` 都是 projection，不是新的真相对象。
+4. `rollback / resume` 必须通过 `parent_workflow_id`、`rerun_of_run_id`、`supersedes`、`version_no` 等谱系字段表达，不允许原地回滚历史对象。
+5. `manuscript_block` 不直接引用 `analysis_run`，只能引用 `assertion`。
+6. 所有 artifact 不原地覆盖，只能新增并通过 `supersedes` 建立谱系。
+7. `discussion mode` 只产生计划，不直接产生可导出的结果文本。
+8. 所有导出前都必须经过 Evidence Control Plane 全链路校验。
+9. 临床模式下，未脱敏数据不得进入外部模型。
+10. 审计日志是 append-only，不允许回写修改。
 
 ## 10. 分阶段实施
 
@@ -291,6 +340,8 @@ flowchart LR
 - assertion 抽取
 - 引文熔断
 - 初稿生成
+- 项目级实时 timeline 和阶段标签
+- artifact inspector 基础跳转
 
 ### P1
 
@@ -299,6 +350,9 @@ flowchart LR
 - 审核流
 - Temporal durable workflow
 - 更完整的 review / export / audit
+- workflow child branch 驱动的 rollback / resume
+- discussion mode + planning artifact + analysis plan 审批
+- 更丰富的 run visualization 和 checkpoint 展示
 
 ### P2
 

@@ -9,6 +9,7 @@ import { createServerControlPlaneClient } from "@/lib/api/control-plane/client";
 import {
   type FormActionState,
   getErrorMessage,
+  getOptionalNumber,
   getOptionalString,
   getString,
   getStringList,
@@ -28,6 +29,7 @@ export async function createReviewAction(
   const reviewTypeRaw = getString(formData, "review_type");
   const targetKindRaw = getString(formData, "target_kind");
   const targetId = getString(formData, "target_id");
+  const targetVersionNoRaw = getOptionalString(formData, "target_version_no");
   const reviewerId = getOptionalString(formData, "reviewer_id");
   const comments = getOptionalString(formData, "comments");
   const checklistInput = getString(formData, "checklist_json");
@@ -35,6 +37,7 @@ export async function createReviewAction(
   const targetKind = REVIEW_TARGET_KINDS.has(targetKindRaw as LineageKind)
     ? (targetKindRaw as LineageKind)
     : undefined;
+  const targetVersionNo = getOptionalNumber(formData, "target_version_no");
 
   if (reviewTypeRaw === "" || targetKindRaw === "" || targetId === "") {
     return {
@@ -53,6 +56,16 @@ export async function createReviewAction(
   if (targetKind === undefined) {
     return {
       message: "target_kind is invalid.",
+      status: "error",
+    };
+  }
+
+  if (
+    targetVersionNoRaw !== undefined &&
+    (targetVersionNo === undefined || !Number.isInteger(targetVersionNo) || targetVersionNo < 1)
+  ) {
+    return {
+      message: "target_version_no must be a positive integer.",
       status: "error",
     };
   }
@@ -76,7 +89,9 @@ export async function createReviewAction(
       reviewer_id: reviewerId,
       target_id: targetId,
       target_kind: targetKind,
+      target_version_no: targetVersionNo,
     });
+    revalidatePath(`/projects/${projectId}`);
     revalidatePath(`/projects/${projectId}/reviews`);
     return {
       message: "Review created.",
@@ -102,6 +117,7 @@ export async function decideReviewAction(
     action,
     comments,
   });
+  revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/projects/${projectId}/reviews`);
   redirect(`/projects/${projectId}/reviews`);
 }

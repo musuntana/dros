@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { formatDateTime } from "@/lib/format/date";
 
 import { StatusBadge } from "@/components/status/status-badge";
@@ -23,8 +25,8 @@ export function EvidenceDashboard({
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Evidence</p>
         <h1 className="mt-3 font-serif text-4xl text-strong">Sources, search, and assertion grounding</h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-muted">
-          Search and resolve stay source-centric. Project-level evidence links are aggregated from real assertion detail
-          responses because the control plane does not expose a dedicated link list route yet.
+          Search and resolve stay source-centric. Project-level evidence links now have dedicated list and detail routes,
+          so grounding review no longer has to hide behind assertion detail only.
         </p>
       </section>
 
@@ -67,18 +69,21 @@ export function EvidenceDashboard({
               linkRecords.map((record) => (
                 <article key={record.link.id} className="rounded-2xl border border-subtle bg-app px-4 py-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
+                    <Link
+                      className="block transition hover:opacity-80"
+                      href={`/projects/${projectId}/evidence-links/${record.link.id}`}
+                    >
                       <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                         {record.link.relation_type}
                       </p>
-                      <p className="mt-2 text-sm font-medium text-strong">{record.assertion.text_norm}</p>
+                      <p className="mt-2 text-sm font-medium text-primary">{record.assertion.text_norm}</p>
                       <p className="mt-2 text-xs text-muted">
                         {record.source?.title ?? record.link.evidence_source_id} · {formatDateTime(record.link.created_at)}
                       </p>
-                    </div>
+                    </Link>
                     <div className="flex flex-col items-start gap-2">
                       <StatusBadge label={record.link.verifier_status} />
-                      <form action={verifyEvidenceLinkAction.bind(null, projectId, record.link.id)}>
+                      <form action={verifyEvidenceLinkAction.bind(null, projectId, record.link.id, undefined)}>
                         <button
                           className="rounded-pill border border-subtle bg-white/70 px-3 py-2 text-xs font-semibold text-strong transition hover:border-primary/20 hover:text-primary"
                           type="submit"

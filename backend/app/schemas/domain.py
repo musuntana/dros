@@ -224,6 +224,7 @@ class AnalysisRunCreate(DRBaseModel):
     params_json: dict[str, Any] = Field(default_factory=dict)
     random_seed: int = 0
     workflow_instance_id: UUID | None = None
+    rerun_of_run_id: UUID | None = None
 
 
 class AnalysisRunRead(DRBaseModel):
@@ -255,6 +256,7 @@ class ArtifactCreate(DRBaseModel):
     project_id: UUID
     run_id: UUID | None = None
     artifact_type: ArtifactType
+    output_slot: str | None = None
     storage_uri: str = Field(min_length=1)
     mime_type: str | None = None
     sha256: str = Field(min_length=64, max_length=64)
@@ -268,6 +270,7 @@ class ArtifactRead(DRBaseModel):
     project_id: UUID
     run_id: UUID | None = None
     artifact_type: ArtifactType
+    output_slot: str | None = None
     storage_uri: str
     mime_type: str | None = None
     sha256: str
@@ -459,6 +462,7 @@ class ReviewCreate(DRBaseModel):
     review_type: ReviewType
     target_kind: LineageKind
     target_id: UUID
+    target_version_no: int | None = Field(default=None, ge=1)
     reviewer_id: UUID | None = None
     checklist_json: list[dict[str, Any]] = Field(default_factory=list)
     comments: str | None = None
@@ -471,6 +475,7 @@ class ReviewRead(DRBaseModel):
     review_type: ReviewType
     target_kind: LineageKind
     target_id: UUID
+    target_version_no: int | None = Field(default=None, ge=1)
     state: ReviewState
     reviewer_id: UUID | None = None
     checklist_json: list[dict[str, Any]]

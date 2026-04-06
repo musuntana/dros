@@ -10,9 +10,9 @@
 
 ## 0. 当前仓库实现快照
 
-截至 2026-04-05，当前代码库的边界是：
+截至 2026-04-06，当前代码库的边界是：
 
-- 仓库内已实现 `docs/fastapi-route-catalog.md` 中全部 61 条业务 / 内部 REST 路由。
+- 仓库内已实现 `docs/fastapi-route-catalog.md` 中全部 65 条业务 / 内部 REST 路由。
 - 仓库内额外实现了 1 条系统路由：`GET /healthz`。
 - assertion 当前创建后默认进入 `draft`，需要先经过 `/v1/projects/{project_id}/verify` 才能进入 `verified` 消费态。
 - export 当前要求当前 manuscript version 已存在正式 verify 结果；未 verify 的稿件版本会被阻断。
@@ -39,7 +39,11 @@
 - `DROS_AUTH_INTROSPECTION_URL` 当前已接入 bearer introspection；既支持 opaque token，也支持在本地 JWT 校验后继续做 `active` gate。
 - bearer token 当前已支持最小 `jti` lifecycle gate：可强制 `jti` claim，并按静态 denylist 拒绝已撤销 token。
 - global scopes 与 project-scoped required scopes 当前都已正式执行；project effective scopes 以 `principal scope_tokens ∩ membership scope_tokens` 为准。
-- `/v1/projects/{project_id}/events` 当前会优先输出 schema-backed domain event envelope；`project / dataset_snapshot / workflow / analysis_run / artifact / review / export` 已接上结构化序列化，其余审计事件仍走通用 SSE envelope 回退。
+- `POST /workflows` 当前已把 `parent_workflow_id` 落成真实 child branch：会校验父 workflow、补 `resume_from_parent` task，并在 non-terminal parent 上继承 `state / current_step` 继续推进。
+- `POST /analysis-runs` 当前已把 `rerun_of_run_id` 落成真实 rerun 语义：会校验历史 run 的 `snapshot_id + template_id`，并仅对带显式 `output_slot` 的新旧 output artifact 自动接 `supersedes` 链。
+- `POST /manuscripts/{manuscript_id}/versions` 当前已把 `base_version_no` 落成真实版本派生：会复制历史 version 的 block 与 block-assertion link，并把新 block 的 `supersedes_block_id` 指向被派生版本。
+- `GET /manuscripts/{manuscript_id}/blocks` 当前支持 `version_no` 查询历史 block；请求 future version 会返回 `422`。
+- `/v1/projects/{project_id}/events` 当前会优先输出 schema-backed domain event envelope；`project / dataset_snapshot / workflow / analysis_run / artifact / assertion / evidence / review / export` 已接上结构化序列化，其余审计事件仍走通用 SSE envelope 回退。
 - 当前开发态 `uploads/sign` 与 `download-url` 会返回本地 object-store file URL；前端仍必须继续通过 `GatewayClient` adapter 消费这些能力，而不是把 URL 规则写死进业务页面。
 
 ## 1. 约定
@@ -66,7 +70,7 @@
 | `GET` | `/v1/session` | Gateway | 返回当前 actor / principal / tenant / role scopes | `SessionRead` |
 | `POST` | `/v1/uploads/sign` | Gateway + Dataset Service | 生成对象存储签名上传 URL | `SignedUploadResponse` |
 | `POST` | `/v1/uploads/complete` | Gateway + Dataset Service | 回调上传完成，登记临时文件引用 | `UploadCompleteResponse` |
-| `GET` | `/v1/projects/{project_id}/events` | Gateway | SSE 订阅项目级 workflow/review/export 事件 | `text/event-stream` |
+| `GET` | `/v1/projects/{project_id}/events` | Gateway | SSE 订阅项目级 schema-backed timeline 事件 | `text/event-stream` |
 | `GET` | `/v1/projects/{project_id}/artifacts/{artifact_id}/download-url` | Gateway | 生成 artifact 临时下载地址 | `SignedArtifactUrlResponse` |
 
 ## 3. Projects
@@ -83,7 +87,9 @@
 建议模型：
 
 - `CreateProjectRequest`: `name`, `project_type`, `compliance_level`, `owner_id`, `target_journal?`
-- `ProjectDetailResponse`: `project`, `active_workflows`, `latest_snapshot`, `active_manuscript`, `review_summary`
+- `ProjectDetailResponse`: `project`, `active_workflows`, `latest_snapshot`, `active_manuscript`, `review_summary`, `review_summary_scope`
+- `review_summary` 当前只统计 active manuscript current version 的 review 状态，不再混入整个 project 的历史 review
+- `review_summary_scope` 当前显式标记该摘要绑定的 manuscript/version
 
 ## 4. Datasets
 
@@ -101,6 +107,7 @@
 
 - `import-public` 只做注册和抓取，不直接启动统计分析。
 - `register-upload` 默认进入 `phi_scan_status=pending`，由策略服务决定能否启动后续 workflow。
+- `policy-checks` 当前会把 `phi_scan_pending / phi_scan_blocked / deidentification_pending / deidentification_failed` 显式返回到 `blocking_reasons`；阻断时会额外发 `dataset.snapshot.blocked`，同一 snapshot + reason 不重复落账。
 - `snapshot` 对象一旦创建不可修改，只能产生新的 `snapshot_no`.
 
 ## 5. Workflows / Analysis / Templates
@@ -115,9 +122,14 @@
 | `GET` | `/v1/projects/{project_id}/workflows/{workflow_instance_id}` | Workflow Service | 查询状态机、步骤、gate 结果 | `WorkflowDetailResponse` |
 | `POST` | `/v1/projects/{project_id}/workflows/{workflow_instance_id}/advance` | Workflow Service | 系统或人工推进下一步 | `WorkflowDetailResponse` |
 | `POST` | `/v1/projects/{project_id}/workflows/{workflow_instance_id}/cancel` | Workflow Service | 取消 workflow | `WorkflowDetailResponse` |
-| `POST` | `/v1/projects/{project_id}/analysis-runs` | Workflow + Job Broker | 创建 analysis run 并进入开发态执行链 | `CreateAnalysisRunResponse` |
+| `POST` | `/v1/projects/{project_id}/analysis-runs` | Workflow + Job Broker | 创建 analysis run，支持 `rerun_of_run_id` 并进入开发态执行链 | `CreateAnalysisRunResponse` |
 | `GET` | `/v1/projects/{project_id}/analysis-runs` | Workflow + Job Broker | 分页列出 project 下的 analysis run | `AnalysisRunListResponse` |
 | `GET` | `/v1/projects/{project_id}/analysis-runs/{run_id}` | Workflow + Artifact Service | 查询 analysis run 元数据与输出 artifact | `AnalysisRunDetailResponse` |
+
+边界：
+
+- `POST /workflows` 在 `parent_workflow_id` 存在时会创建 child workflow branch，不会改写父 workflow。
+- child workflow 当前会校验父 workflow 存在且 `workflow_type` 一致；若父 workflow 仍处于 non-terminal state，child 会从该 `state / current_step` 继续。
 
 建议把 `POST /workflows` 的 `workflow_type` 限定成：
 
@@ -146,6 +158,9 @@
 - assertion 创建后默认先进入 `draft`，不能直接当作 `verified` 事实消费。
 - `artifacts` 只登记对象存储定位和哈希，不上传二进制内容。
 - `lineage-edges` 主要用于回填和显式修复，不替代核心对象关系；其中 artifact `supersedes` 会同步写入 `artifact.superseded_by`。
+- 同一 `run_id + artifact_type + output_slot` 当前不允许重复 artifact 注册。
+- `POST /artifacts` 当前会把 legacy `metadata_json.output_slot` 回填到顶层 `output_slot`；如果两者冲突，返回 `422`。
+- 手工 artifact `supersedes` 当前要求相同 `artifact_type + output_slot`；若两端都绑定 run，replacement run 还必须声明 `rerun_of_run_id`.
 
 ## 7. Evidence / Citation Resolver
 
@@ -155,14 +170,20 @@
 | `POST` | `/v1/projects/{project_id}/evidence/resolve` | Evidence Service | 标准化 PMID / PMCID / DOI | `ResolveEvidenceResponse` |
 | `POST` | `/v1/projects/{project_id}/evidence` | Evidence Service | 将候选结果写入 evidence source cache / project binding | `UpsertEvidenceSourceResponse` |
 | `GET` | `/v1/projects/{project_id}/evidence` | Evidence Service | 查询与项目相关的 evidence links / source refs | `EvidenceSourceListResponse` |
+| `POST` | `/v1/projects/{project_id}/evidence/{evidence_source_id}/chunks` | Evidence Service | 为 evidence source 写入 chunk/native excerpt | `CreateEvidenceChunkResponse` |
+| `GET` | `/v1/projects/{project_id}/evidence/{evidence_source_id}/chunks` | Evidence Service | 按 source 查询 evidence chunk 列表 | `EvidenceChunkListResponse` |
+| `GET` | `/v1/projects/{project_id}/evidence/chunks/{chunk_id}` | Evidence Service | 查询单个 evidence chunk 与 source | `EvidenceChunkDetailResponse` |
 | `POST` | `/v1/projects/{project_id}/evidence-links` | Evidence Service | 将 assertion 绑定到 evidence source/span | `CreateEvidenceLinkResponse` |
 | `GET` | `/v1/projects/{project_id}/evidence-links` | Evidence Service | 分页列出 project 下的 evidence link | `EvidenceLinkListResponse` |
+| `GET` | `/v1/projects/{project_id}/evidence-links/{link_id}` | Evidence Service | 查询 evidence link、assertion、source、resolved chunk 与上游 artifact/run | `EvidenceLinkDetailResponse` |
 | `POST` | `/v1/projects/{project_id}/evidence-links/{link_id}/verify` | Review + Verifier | 对 span / 语义边界重新核验 | `VerifyEvidenceLinkResponse` |
 
 实现注意：
 
 - `search` 只返回候选，不直接把自由文本结论写入文稿。
 - `resolve` 必须遵守 `NCBI E-utilities` 限速：无 key `<=3 req/s`，有 key `<=10 req/s`。
+- `evidence/{source_id}/chunks` 当前已提供 chunk-native create / list / detail，不再只依赖 `metadata_json` fallback。
+- `POST /evidence` 若 metadata 内带 inline preview 文本，当前会自动 materialize 一个 `inline_preview` chunk；`POST /evidence-links` 在 source 仅有一个 chunk 时会自动绑定该 chunk。
 - 全文自动化抓取只面向 `PMC Open Access Subset` 或其他明确许可来源；非 OA 默认 `metadata_only`.
 - `evidence-links/{link_id}/verify` 当前会对 identifier / license 边界做真实校验，不再是占位通过。
 - 当前外部 NCBI 路径仍是 opt-in 开关，不是默认强依赖；多 PMID 的 `EPost + EFetch` batch 已落地，但默认检索策略仍不是 external-first。
@@ -176,12 +197,14 @@
 | `GET` | `/v1/projects/{project_id}/manuscripts/{manuscript_id}` | Manuscript Service | 查询稿件当前版本 | `ManuscriptDetailResponse` |
 | `POST` | `/v1/projects/{project_id}/manuscripts/{manuscript_id}/blocks` | Manuscript Service | 追加新 block | `CreateManuscriptBlockResponse` |
 | `GET` | `/v1/projects/{project_id}/manuscripts/{manuscript_id}/blocks` | Manuscript Service | 查询指定版本 blocks | `ManuscriptBlockListResponse` |
-| `POST` | `/v1/projects/{project_id}/manuscripts/{manuscript_id}/versions` | Manuscript Service | 冻结当前 block 集合为新版本 | `CreateManuscriptVersionResponse` |
+| `POST` | `/v1/projects/{project_id}/manuscripts/{manuscript_id}/versions` | Manuscript Service | 基于 base version 派生新的 current version | `CreateManuscriptVersionResponse` |
 | `POST` | `/v1/projects/{project_id}/manuscripts/{manuscript_id}/render` | Manuscript Service | 基于 verified assertions 渲染结构化初稿 | `RenderManuscriptResponse` |
 
 边界：
 
 - block 内容必须能回链到 `assertion_id`.
+- `POST /manuscripts/{manuscript_id}/versions` 当前会按 `base_version_no` 克隆历史 block 集合与 block-assertion link；这条路由不是把 `current_version_no` 原地改回去。
+- `GET /manuscripts/{manuscript_id}/blocks` 当前可通过 `version_no` 读取历史块集合；未传时返回 current version。
 - `render` 只能消费 `assertion.state=verified`.
 - block 更新通过“创建 superseding block + bump version”，不做原地改写。
 
@@ -208,6 +231,8 @@
 - `/verify` 当前支持两种入口：按 `target_ids` 校验对象，或按 `manuscript_id` 校验当前稿件版本。
 - `/verify` 当前会返回可查询的 `workflow_instance_id`；后续可通过 `GET /workflows/{workflow_instance_id}` 回读对应 `gate_evaluations`。
 - `review` 当前负责治理记录和人工决策审计；export 的技术门禁仍以正式 verify 结果为准，不以 `review` 对象存在与否作为硬前置。
+- `POST /reviews` 当前在 `target_kind=manuscript` 时支持可选 `target_version_no`；缺失时默认绑定到 current version，传 future version 返回 `422`。
+- `POST /reviews` 当前拒绝给非 manuscript target 传 `target_version_no`，避免把版本语义错误扩散到 artifact / project review。
 - `POST /exports` 当前只接受已经完成正式 verify 的 current manuscript version；否则返回 `blocked` export job。
 
 ## 10. Audit / Admin

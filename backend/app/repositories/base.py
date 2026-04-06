@@ -511,6 +511,19 @@ class BaseRepository:
         self.default_compliance_level = ComplianceLevel.INTERNAL
 
     @property
+    def is_rowlevel(self) -> bool:
+        return get_settings().ledger_backend == "postgres_rowlevel"
+
+    def unit_of_work(self):
+        if self.is_rowlevel:
+            from ..db.uow import PostgresUnitOfWork
+
+            return PostgresUnitOfWork()
+        from ..db.uow import MemoryUnitOfWork
+
+        return MemoryUnitOfWork()
+
+    @property
     def auth_context(self):
         return current_auth_context()
 
@@ -662,6 +675,115 @@ class BaseRepository:
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"principal {self.principal_id} has no access to project {project_id}",
         )
+
+    def append_audit_event_uow(
+        self,
+        uow,
+        *,
+        project_id: UUID | None,
+        event_type: str,
+        target_kind: LineageKind,
+        target_id: UUID | None,
+        payload_json: dict[str, Any],
+        actor_id: UUID | None = None,
+        actor_type: ActorType | None = None,
+        trace_id: str | None = None,
+        request_id: str | None = None,
+    ) -> AuditEventRead:
+        """Append an audit event inside the given UoW transaction."""
+        if not self.is_rowlevel:
+            return append_audit_event(
+                self.store,
+                project_id=project_id,
+                event_type=event_type,
+                target_kind=target_kind,
+                target_id=target_id,
+                payload_json=payload_json,
+                actor_id=actor_id,
+                actor_type=actor_type,
+                trace_id=trace_id,
+                request_id=request_id,
+            )
+        # Row-level: INSERT into audit_events table
+        from ..db.fk_sync import ensure_project
+        from ..db.query import insert_row
+
+        if project_id is not None:
+            ensure_project(uow.conn, self.store, project_id)
+
+        context = current_auth_context()
+        now = utcnow()
+        resolved_actor_id = actor_id if actor_id is not None else context.principal_id
+        resolved_actor_type = actor_type
+        if resolved_actor_type is None:
+            resolved_actor_type = ActorType.USER if resolved_actor_id is not None else ActorType.SYSTEM
+        # Hash-chain: fetch last event hash from DB
+        from ..db.query import select_where
+
+        prev_events = select_where(
+            uow.conn,
+            "audit_events",
+            {},
+            order_by="created_at",
+            order_desc=True,
+            limit=1,
+        )
+        prev_hash = prev_events[0]["event_hash"] if prev_events else None
+        hash_payload = json.dumps(
+            {
+                "project_id": str(project_id) if project_id else None,
+                "event_type": event_type,
+                "target_kind": target_kind.value,
+                "target_id": str(target_id) if target_id else None,
+                "payload_json": payload_json,
+                "prev_hash": prev_hash,
+            },
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")
+        event_id = UUID(bytes=sha256(hash_payload).digest()[:16])
+        event_hash = sha256((prev_hash or "").encode("utf-8") + hash_payload).hexdigest()
+        # Resolve tenant_id from project if available
+        if project_id is not None:
+            from ..db.query import select_by_id
+
+            project_row = select_by_id(uow.conn, "projects", project_id)
+            resolved_tenant_id = project_row["tenant_id"] if project_row else context.tenant_id
+        else:
+            resolved_tenant_id = context.tenant_id
+        event = AuditEventRead(
+            id=event_id,
+            tenant_id=resolved_tenant_id,
+            project_id=project_id,
+            actor_id=resolved_actor_id,
+            actor_type=resolved_actor_type,
+            event_type=event_type,
+            target_kind=target_kind,
+            target_id=target_id,
+            request_id=request_id or context.request_id,
+            trace_id=trace_id or context.trace_id,
+            payload_json=payload_json,
+            prev_hash=prev_hash,
+            event_hash=event_hash,
+            created_at=now,
+        )
+        insert_row(uow.conn, "audit_events", {
+            "id": event.id,
+            "tenant_id": event.tenant_id,
+            "project_id": event.project_id,
+            "actor_id": event.actor_id,
+            "actor_type": event.actor_type.value,
+            "event_type": event.event_type,
+            "target_kind": event.target_kind.value if event.target_kind else None,
+            "target_id": event.target_id,
+            "request_id": event.request_id,
+            "trace_id": event.trace_id,
+            "payload_json": json.dumps(event.payload_json, default=str),
+            "prev_hash": event.prev_hash,
+            "event_hash": event.event_hash,
+            "created_at": event.created_at,
+        })
+        return event
 
     @classmethod
     def describe(cls) -> tuple[str, ...]:

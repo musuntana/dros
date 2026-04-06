@@ -43,6 +43,7 @@ Agent 和控制面约束只服从以下设计事实源：
 10. Agent 发现证据不足、字段缺失或规则冲突时，必须显式返回 `blocked` 或 `needs_human`，不得自行脑补。
 11. 段落不得直接引用 AnalysisRun，必须通过 `Assertion -> source_artifact_id / evidence_link` 回链事实来源。
 12. 主干流程由确定性状态机驱动，Agent 只做局部智能节点。
+13. discussion transcript 不是系统真相；立题讨论只能沉淀为结构化计划、artifact、review 和 audit_event。
 
 ## 3. 系统角色
 DR-OS 采用 workflow-first, agent-last 架构。首版角色：
@@ -63,6 +64,17 @@ LangGraph 定位：
 - 支持 HITL interrupts（审批暂停/恢复）
 - 支持 time-travel/fork（回溯与分支实验）
 - **不做**主流程编排器
+
+### 3.1 Discussion Mode / Study Design Roundtable
+
+`discussion mode` 是 `analysis_planning` workflow 的一种前置交互模式，不新增新的 top-level Agent 名册。
+
+约束：
+
+- `临床专家 / 统计顾问 / 文献秘书` 只是对现有 Agent 能力的角色化视角，不是新的持久化系统对象
+- discussion mode 的 durable output 只能是结构化研究问题、analysis plan、planning artifact、review items、audit_event
+- discussion transcript 不能直接作为导出稿件、assertion、模板执行输入或 EvidenceLink 的事实来源
+- discussion mode 结束后仍必须回到白名单模板、Assertion 抽取、Evidence Control Plane 和 review gate
 
 ## 4. 统一状态机
 所有任务必须运行在显式状态下。

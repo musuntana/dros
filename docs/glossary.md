@@ -67,3 +67,15 @@
 
 - 新增 schema、API、事件、文档时，只能使用本文件中的 canonical term / field。
 - 旧词如需在文档中出现，只允许出现在本文件，不允许散落到其他文件。
+
+## 5. Product Surface Terms
+
+以下词可以在产品和架构文档中使用，但它们不是新的持久化 canonical object：
+
+| Product Term | Meaning | Durable Source |
+| :--- | :--- | :--- |
+| `project_timeline` | 项目实时进度与阻断项的展示层 | `workflow_instances` + `workflow_tasks` + domain events + `audit_events` |
+| `run_visualization` | 分析运行阶段、artifact 产出和 blocker 的展示层 | `analysis_runs` + `workflow_tasks` + `runtime_manifest_json` |
+| `artifact_inspector` | 围绕 artifact/assertion/evidence/manuscript 的双向跳转界面 | `lineage_edges` + `assertions` + `evidence_links` + `block_assertion_links` |
+| `discussion_mode` | 立题阶段的受控多角色讨论交互 | `analysis_planning` workflow 的 task payload / artifact / review / audit_event |
+| `rollback / resume` | 基于历史版本继续工作的用户动作 | `parent_workflow_id` / `rerun_of_run_id` / `supersedes` / `version_no` |

@@ -2153,6 +2153,196 @@
         }
       }
     },
+    "/v1/projects/{project_id}/evidence/{evidence_source_id}/chunks": {
+      "post": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "Create Evidence Chunk",
+        "operationId": "create_evidence_chunk_v1_projects__project_id__evidence__evidence_source_id__chunks_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "evidence_source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evidence Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvidenceChunkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateEvidenceChunkResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "List Evidence Chunks",
+        "operationId": "list_evidence_chunks_v1_projects__project_id__evidence__evidence_source_id__chunks_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "evidence_source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evidence Source Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceChunkListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/evidence/chunks/{chunk_id}": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "Get Evidence Chunk",
+        "operationId": "get_evidence_chunk_v1_projects__project_id__evidence_chunks__chunk_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "chunk_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chunk Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceChunkDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/projects/{project_id}/evidence-links": {
       "post": {
         "tags": [
@@ -2253,6 +2443,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EvidenceLinkListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/evidence-links/{link_id}": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "Get Evidence Link",
+        "operationId": "get_evidence_link_v1_projects__project_id__evidence_links__link_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "link_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Link Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceLinkDetailResponse"
                 }
               }
             }
@@ -2557,6 +2800,23 @@
               "type": "string",
               "format": "uuid",
               "title": "Manuscript Id"
+            }
+          },
+          {
+            "name": "version_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version No"
             }
           }
         ],
@@ -3789,6 +4049,17 @@
           "artifact_type": {
             "$ref": "#/components/schemas/ArtifactType"
           },
+          "output_slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Slot"
+          },
           "storage_uri": {
             "type": "string",
             "title": "Storage Uri"
@@ -4392,6 +4663,18 @@
               }
             ],
             "title": "Workflow Instance Id"
+          },
+          "rerun_of_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerun Of Run Id"
           }
         },
         "additionalProperties": false,
@@ -4431,6 +4714,17 @@
           },
           "artifact_type": {
             "$ref": "#/components/schemas/ArtifactType"
+          },
+          "output_slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Slot"
           },
           "storage_uri": {
             "type": "string",
@@ -4665,6 +4959,51 @@
           "snapshot"
         ],
         "title": "CreateDatasetSnapshotResponse"
+      },
+      "CreateEvidenceChunkRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text"
+          },
+          "section_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Label"
+          },
+          "char_start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Char Start",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "CreateEvidenceChunkRequest"
+      },
+      "CreateEvidenceChunkResponse": {
+        "properties": {
+          "evidence_chunk": {
+            "$ref": "#/components/schemas/EvidenceChunkRead"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence_chunk"
+        ],
+        "title": "CreateEvidenceChunkResponse"
       },
       "CreateEvidenceLinkRequest": {
         "properties": {
@@ -5036,6 +5375,18 @@
             "type": "string",
             "format": "uuid",
             "title": "Target Id"
+          },
+          "target_version_no": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Version No"
           },
           "reviewer_id": {
             "anyOf": [
@@ -5421,6 +5772,150 @@
           "failed"
         ],
         "title": "DeidStatus"
+      },
+      "EvidenceChunkDetailResponse": {
+        "properties": {
+          "evidence_chunk": {
+            "$ref": "#/components/schemas/EvidenceChunkRead"
+          },
+          "evidence_source": {
+            "$ref": "#/components/schemas/EvidenceSourceRead"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence_chunk",
+          "evidence_source"
+        ],
+        "title": "EvidenceChunkDetailResponse"
+      },
+      "EvidenceChunkListResponse": {
+        "properties": {
+          "items": {
+            "$ref": "#/components/schemas/Page_EvidenceChunkRead_"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "EvidenceChunkListResponse"
+      },
+      "EvidenceChunkRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "evidence_source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Evidence Source Id"
+          },
+          "chunk_no": {
+            "type": "integer",
+            "title": "Chunk No"
+          },
+          "section_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Label"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "char_start": {
+            "type": "integer",
+            "title": "Char Start"
+          },
+          "char_end": {
+            "type": "integer",
+            "title": "Char End"
+          },
+          "token_count": {
+            "type": "integer",
+            "title": "Token Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "evidence_source_id",
+          "chunk_no",
+          "text",
+          "char_start",
+          "char_end",
+          "token_count",
+          "created_at"
+        ],
+        "title": "EvidenceChunkRead"
+      },
+      "EvidenceLinkDetailResponse": {
+        "properties": {
+          "evidence_link": {
+            "$ref": "#/components/schemas/EvidenceLinkRead"
+          },
+          "assertion": {
+            "$ref": "#/components/schemas/AssertionRead"
+          },
+          "evidence_source": {
+            "$ref": "#/components/schemas/EvidenceSourceRead"
+          },
+          "source_chunk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceChunkRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisRunRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence_link",
+          "assertion",
+          "evidence_source"
+        ],
+        "title": "EvidenceLinkDetailResponse"
       },
       "EvidenceLinkListResponse": {
         "properties": {
@@ -6529,6 +7024,27 @@
         ],
         "title": "Page[DatasetRead]"
       },
+      "Page_EvidenceChunkRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceChunkRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "Page[EvidenceChunkRead]"
+      },
       "Page_EvidenceLinkRead_": {
         "properties": {
           "items": {
@@ -6712,6 +7228,16 @@
             },
             "type": "object",
             "title": "Review Summary"
+          },
+          "review_summary_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewSummaryScopeRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -7058,6 +7584,18 @@
             "format": "uuid",
             "title": "Target Id"
           },
+          "target_version_no": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Version No"
+          },
           "state": {
             "$ref": "#/components/schemas/ReviewState"
           },
@@ -7134,6 +7672,48 @@
           "changes_requested"
         ],
         "title": "ReviewState"
+      },
+      "ReviewSummaryScopeRead": {
+        "properties": {
+          "target_kind": {
+            "$ref": "#/components/schemas/LineageKind"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Target Id"
+          },
+          "target_version_no": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Version No"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target_kind",
+          "target_id"
+        ],
+        "title": "ReviewSummaryScopeRead"
       },
       "ReviewType": {
         "type": "string",

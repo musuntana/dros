@@ -83,6 +83,16 @@ export function ReviewsDashboard({
               />
             </label>
             <label className="grid gap-2">
+              <span className="text-sm font-medium text-strong">Target Version</span>
+              <input
+                className="rounded-2xl border border-subtle bg-app px-4 py-3 text-sm text-strong outline-none"
+                min={1}
+                name="target_version_no"
+                placeholder="manuscript only; blank = current version"
+                type="number"
+              />
+            </label>
+            <label className="grid gap-2">
               <span className="text-sm font-medium text-strong">Reviewer ID</span>
               <input className="rounded-2xl border border-subtle bg-app px-4 py-3 text-sm text-strong outline-none" name="reviewer_id" type="text" />
             </label>
@@ -156,6 +166,7 @@ export function ReviewsDashboard({
                   <div>
                     <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
                       {review.review_type} · {review.target_kind}
+                      {typeof review.target_version_no === "number" ? ` · v${review.target_version_no}` : ""}
                     </p>
                     <p className="mt-2 break-all text-sm font-medium text-strong">{review.target_id}</p>
                     <p className="mt-2 text-xs text-muted">{formatDateTime(review.created_at)}</p>

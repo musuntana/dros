@@ -172,7 +172,9 @@ class ManuscriptService(BaseService):
             target_kind=LineageKind.ASSERTION,
             target_id=assertion.id,
             payload_json={
+                "assertion_id": str(assertion.id),
                 "assertion_type": assertion.assertion_type.value,
+                "state": assertion.state.value,
                 "source_artifact_id": str(assertion.source_artifact_id) if assertion.source_artifact_id else None,
                 "source_run_id": str(assertion.source_run_id) if assertion.source_run_id else None,
                 "supersedes_assertion_id": str(assertion.supersedes_assertion_id) if assertion.supersedes_assertion_id else None,
@@ -259,36 +261,115 @@ class ManuscriptService(BaseService):
         )
         return CreateManuscriptBlockResponse(block=block)
 
-    def list_blocks(self, project_id: UUID, manuscript_id: UUID) -> ManuscriptBlockListResponse:
+    def list_blocks(
+        self,
+        project_id: UUID,
+        manuscript_id: UUID,
+        *,
+        version_no: int | None = None,
+    ) -> ManuscriptBlockListResponse:
         manuscript = self._require_manuscript(project_id, manuscript_id, "manuscripts:read")
-        blocks = [
-            block
-            for block in self.repository.store.manuscript_blocks.values()
-            if block.project_id == project_id
-            and block.manuscript_id == manuscript_id
-            and block.version_no == manuscript.current_version_no
-        ]
-        blocks.sort(key=lambda block: (block.section_key.value, block.block_order))
+        target_version_no = version_no or manuscript.current_version_no
+        if target_version_no > manuscript.current_version_no:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"version_no {target_version_no} is ahead of current_version_no "
+                    f"{manuscript.current_version_no}"
+                ),
+            )
+        blocks = self._list_blocks_for_version(project_id, manuscript_id, target_version_no)
         return ManuscriptBlockListResponse(items=blocks)
 
     def create_version(
         self,
         project_id: UUID,
         manuscript_id: UUID,
-        _: CreateManuscriptVersionRequest,
+        payload: CreateManuscriptVersionRequest,
     ) -> CreateManuscriptVersionResponse:
         manuscript = self._require_manuscript(project_id, manuscript_id, "manuscripts:write")
+        base_version_no = payload.base_version_no or manuscript.current_version_no
+        if base_version_no > manuscript.current_version_no:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"base_version_no {base_version_no} is ahead of current_version_no "
+                    f"{manuscript.current_version_no}"
+                ),
+            )
+
+        now = self.now()
+        next_version_no = manuscript.current_version_no + 1
+        base_blocks = self._list_blocks_for_version(project_id, manuscript_id, base_version_no)
         updated = manuscript.model_copy(
-            update={"current_version_no": manuscript.current_version_no + 1, "updated_at": self.now()}
+            update={
+                "current_version_no": next_version_no,
+                "state": ManuscriptState.DRAFT,
+                "updated_at": now,
+            }
         )
         self.repository.store.manuscripts[manuscript_id] = updated
+        cloned_blocks = 0
+        for base_block in base_blocks:
+            cloned_block = ManuscriptBlockRead(
+                id=uuid4(),
+                tenant_id=self.repository.tenant_id,
+                project_id=project_id,
+                manuscript_id=manuscript_id,
+                version_no=next_version_no,
+                section_key=base_block.section_key,
+                block_order=base_block.block_order,
+                block_type=base_block.block_type,
+                content_md=base_block.content_md,
+                status=base_block.status,
+                supersedes_block_id=base_block.id,
+                created_at=now,
+                assertion_ids=list(base_block.assertion_ids),
+            )
+            self.repository.store.manuscript_blocks[cloned_block.id] = cloned_block
+            cloned_blocks += 1
+
+            existing_links = [
+                link
+                for link in self.repository.store.block_assertion_links.values()
+                if link.block_id == base_block.id
+            ]
+            if existing_links:
+                existing_links.sort(key=lambda link: (link.display_order, str(link.assertion_id)))
+                for link in existing_links:
+                    self.repository.store.block_assertion_links[(cloned_block.id, link.assertion_id)] = (
+                        BlockAssertionLinkRead(
+                            block_id=cloned_block.id,
+                            assertion_id=link.assertion_id,
+                            render_role=link.render_role,
+                            display_order=link.display_order,
+                            created_at=now,
+                        )
+                    )
+            else:
+                for display_order, assertion_id in enumerate(base_block.assertion_ids):
+                    self.repository.store.block_assertion_links[(cloned_block.id, assertion_id)] = (
+                        BlockAssertionLinkRead(
+                            block_id=cloned_block.id,
+                            assertion_id=assertion_id,
+                            render_role="support",
+                            display_order=display_order,
+                            created_at=now,
+                        )
+                    )
+
         append_audit_event(
             self.repository.store,
             project_id=project_id,
             event_type="manuscript.version.created",
             target_kind=LineageKind.MANUSCRIPT,
             target_id=manuscript_id,
-            payload_json={"version_no": updated.current_version_no},
+            payload_json={
+                "version_no": updated.current_version_no,
+                "base_version_no": base_version_no,
+                "reason": payload.reason,
+                "copied_block_count": cloned_blocks,
+            },
         )
         return CreateManuscriptVersionResponse(manuscript=updated)
 
@@ -326,6 +407,17 @@ class ManuscriptService(BaseService):
             blocks=rendered_blocks,
             warnings=[] if rendered_blocks else ["no verified assertions available for rendering"],
         )
+
+    def _list_blocks_for_version(self, project_id: UUID, manuscript_id: UUID, version_no: int) -> list[ManuscriptBlockRead]:
+        blocks = [
+            block
+            for block in self.repository.store.manuscript_blocks.values()
+            if block.project_id == project_id
+            and block.manuscript_id == manuscript_id
+            and block.version_no == version_no
+        ]
+        blocks.sort(key=lambda block: (block.section_key.value, block.block_order, block.created_at))
+        return blocks
 
     def _require_project(self, project_id: UUID, *required_scopes: str) -> object:
         return self.repository.require_project(project_id, required_scopes=tuple(required_scopes))

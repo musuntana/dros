@@ -50,6 +50,25 @@ export function mergeProjectEvents(current: ProjectEvent[], incoming: ProjectEve
     .slice(0, MAX_PROJECT_EVENTS);
 }
 
+export function mergeProjectEventSnapshot(current: ProjectEvent[], incomingEvents: ProjectEvent[]): ProjectEvent[] {
+  const byId = new Map(current.map((event) => [event.event_id, event]));
+
+  for (const incoming of incomingEvents) {
+    const existing = byId.get(incoming.event_id);
+    if (!existing) {
+      byId.set(incoming.event_id, incoming);
+      continue;
+    }
+
+    const keepExisting = existing.produced_by !== "audit.seed" && incoming.produced_by === "audit.seed";
+    byId.set(incoming.event_id, keepExisting ? existing : incoming);
+  }
+
+  return [...byId.values()]
+    .sort((left, right) => right.occurred_at.localeCompare(left.occurred_at))
+    .slice(0, MAX_PROJECT_EVENTS);
+}
+
 export function summarizeProjectEventPayload(payload: Record<string, unknown>): string {
   const priorityKeys = [
     "workflow_type",
@@ -119,6 +138,11 @@ export function buildProjectEventLinks(projectId: string, event: ProjectEvent): 
 
   if (readPayloadString(payload, "review_id")) {
     pushLink("Reviews", `/projects/${projectId}/reviews`);
+  }
+
+  const evidenceLinkId = readPayloadString(payload, "link_id");
+  if (evidenceLinkId) {
+    pushLink("Evidence link", `/projects/${projectId}/evidence-links/${evidenceLinkId}`);
   }
 
   if (readPayloadString(payload, "export_job_id")) {

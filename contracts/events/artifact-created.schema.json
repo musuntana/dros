@@ -37,6 +37,18 @@
           "title": "Artifact Type",
           "type": "string"
         },
+        "output_slot": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Slot"
+        },
         "storage_uri": {
           "minLength": 1,
           "title": "Storage Uri",
