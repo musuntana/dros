@@ -21,3 +21,19 @@ If the required executables are unavailable, it exits 2 and writes an explicit *
 **Distinguish three gates:** Offline unit tests verify contract behavior; the actual Nextflow run verifies execution; scientific validity requires separate domain checks. The `verify` command validates local artifact content and coverage even for blocked or failed runs. Its “INTEGRITY PASS” does **not** mean workflow execution or scientific validation succeeded. Local checksums cannot authenticate a maliciously re-written manifest without independent trust/signature.
 
 Known limitations: no resolved commit/container lock, no trustworthy remote test-data hash recording, no independent clean replay, no data-policy service integration, no research claims, no Web integration, no differential expression, and no production scheduler. See [ADR-0001](adr/0001-scientific-execution-boundary.md).
+
+## Compare two independently recorded runs
+
+After two **real** completed runs, compare tracked `results/` contents:
+
+```bash
+python -m workflows.rnaseq.compare ./experiments/rnaseq-test-001 ./experiments/rnaseq-test-002 > comparison.json
+```
+
+The JSON response separates `identical_outputs`, `different_outputs`, `invalid_evidence`, `configuration_mismatch` and `not_comparable`. Exit 0 means matching result bytes; exit 1 means changed/added/removed files; exit 2 means comparison is blocked due to invalid or insufficient evidence. It requires two distinct `run_id`s, successful execution statuses and valid integrity inventories. It **does not verify** inputs, reference genomes, resolved workflow commits or actual image digests. Matching result bytes therefore do not establish independently reproducible biology.
+
+Offline contract tests:
+
+```bash
+python -m pytest -q tests/test_rnaseq_phase0.py tests/test_rnaseq_compare.py
+```
