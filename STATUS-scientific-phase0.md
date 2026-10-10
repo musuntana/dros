@@ -14,3 +14,11 @@
 4. Separate `nf-core/differentialabundance` template for properly designed DEG statistics.
 
 **Do not mark scientific Phase 0 accepted until real E2E evidence is collected.**
+
+## Phase 0.2: result-byte comparison (2026-10-10)
+
+- Added standalone `workflows/rnaseq/compare.py` for two integrity-checked, separately identified executions.
+- Added 10 synthetic/fixture tests in `tests/test_rnaseq_compare.py`; fixtures are not scientific experiments.
+- Added the comparison tests to scientific offline GitHub CI. Check the latest PR commit's workflow run before declaring its checks accepted.
+- Comparison results intentionally distinguish identical result bytes from scientifically reproducible experimental conclusions.
+- Actual upstream input checksums, exact resolved pipeline commit, container digest verification, true E2E and independent scientific validation remain **NOT COMPLETE**.
